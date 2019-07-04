@@ -20,12 +20,9 @@ agProdLvl4 = data['table']
 data = pyreadr.read_r('./Datasets/06.AgriculturalSubsidyCard.RData')
 agSubsidyCard = data['table']
 
-data = pyreadr.read_r('./Datasets/33.FoodDiary_level_1.RData')
+foodDiaryLvl1 = pd.read_stata('./Datasets/33.FoodDiary_level_1.dta')
 
-'''data = pyreadr.read_r('./Datasets/34.FoodDiary_food_level_2.RData')
-foodDiaryLvl2 = data['table']
+foodDiaryLvl2 = pd.read_stata('./Datasets/34.FoodDiary_food_level_2.dta')
 
-data = pyreadr.read_r('./Datasets/35.Fooddiary_food_foodtype_level_3.RData')
-foodDiaryLvl3 = data['table']'''
-
+foodDiaryLvl3 = pd.read_stata('./Datasets/35.Fooddiary_food_foodtype_level_3.dta')
 
