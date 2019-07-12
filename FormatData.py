@@ -36,13 +36,13 @@ foodsList = pd.Series(fDiary2Link3.food_type_name.unique())
 groupedIDAndWeek = fDiary2Link3.groupby(['hh_ID', 'week_number']).sum()
 
 householdIDLvl1 = pd.Series(fDiaryLvl1.hh_ID.unique())
-householdIDLinked = pd.Series(fDiary2Link3.hh_ID.unique()).sort_values()
-weekNumbers = pd.Series(fDiary2Link3.week_number.unique()).sort_values()
+householdIDLinked = pd.Series(fDiaryLvl1.hh_ID.unique()).sort_values()
+weekNumbers = pd.Series(fDiaryLvl1.week_number.unique()).sort_values()
 
 responseTest = pd.DataFrame(columns=weekNumbers, index=householdIDLinked)
 responseTest = responseTest.fillna(0)
 # If there is a hh_ID, find its week number and count that as a 1, otherwise there was no response
-# Use a for loop, or try to extract it directly from the dataframe
+# Ideally, everything is a 0 or a 3
 
 for y in fDiaryLvl1.index:
     responseTest.at[fDiaryLvl1.loc[y, 'hh_ID'], fDiaryLvl1.loc[y, 'week_number']] += 1
