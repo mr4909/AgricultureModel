@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 agExtServices = pd.read_stata('./Datasets/01.AgriculturalExtensionServices.dta')
 agProdLvl1 = pd.read_stata('./Datasets/02.AgriculturalProduction_level_1.dta')
 agProdLvl2 = pd.read_stata('./Datasets/03.AgriculturalProduction_plot_repeat_begin_level_2.dta')
@@ -18,9 +17,10 @@ fDiaryLvl2 = pd.read_stata('./Datasets/34.FoodDiary_food_level_2.dta')
 fDiaryLvl3 = pd.read_stata('./Datasets/35.Fooddiary_food_foodtype_level_3.dta')
 
 fDiaryLvl1.drop(['submissiondate', 'start_time', 'end_time', 'today', 'start_date', 'expiration_date',
-                    'max_submissions', 'task_value', 'task_length'], axis=1, inplace=True)
+                'max_submissions', 'task_value', 'task_length'], axis=1, inplace=True)
 fDiaryLvl2.drop(['food_label'], axis=1, inplace=True)
 fDiaryLvl3.drop(['food_type_label', 'food_unit_label'], axis=1, inplace=True)
 
-fDiary1Link2 = pd.merge(fDiaryLvl1, fDiaryLvl2)
-fDiary2Link3 = pd.merge(fDiary1Link2, fDiaryLvl3)
+
+fDiary1Link2 = fDiaryLvl1.merge(fDiaryLvl2)
+fDiary2Link3 = fDiary1Link2.merge(fDiaryLvl3)
