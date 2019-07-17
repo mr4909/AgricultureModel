@@ -40,7 +40,7 @@ foodsList = pd.DataFrame(fDiary2Link3.food_type_name.unique(), columns=['food_ty
 # Conversion from weight to volume is not the same for each food type. Depending on the food, different units are used
 # TODO: Find which unit is common for each type of food, then create another column for units
 caloriesPerLiter = [2859.5]
-foodsList['Calories'] = caloriesPerLiter
+# foodsList.insert(1, 'calories', caloriesPerLiter)
 
 groupedIDAndWeek = fDiary2Link3.groupby(['hh_ID', 'week_number'], as_index=False).sum()
 # The sum() deletes any columns that are not ints
