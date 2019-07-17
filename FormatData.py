@@ -33,10 +33,18 @@ fDiary2Link3 = fDiary1Link2.merge(fDiaryLvl3).sort_values(by=['hh_ID']).reset_in
 # fDiary2Link3.drop(fDiary2Link3.ix([:,''])
 # Deleting a range of columns
 
-foodsList = pd.Series(fDiary2Link3.food_type_name.unique())
+foodsList = pd.DataFrame(fDiary2Link3.food_type_name.unique(), columns=['food_type'])
 # The list of different foods which will be used to calculate calories
+# TODO: Find the calories for each food
+# TODO: Convert all of them to the same units, or have different calorie values for each food?
+# Conversion from weight to volume is not the same for each food type. Depending on the food, different units are used
+# TODO: Find which unit is common for each type of food, then create another column for units
+caloriesPerLiter = [2859.5]
+foodsList['Calories'] = caloriesPerLiter
 
 groupedIDAndWeek = fDiary2Link3.groupby(['hh_ID', 'week_number'], as_index=False).sum()
+# The sum() deletes any columns that are not ints
+# TODO: Maybe try to manually re-add the string value columns?
 
 householdIDLvl1 = pd.Series(fDiaryLvl1.hh_ID.unique())
 householdIDLinked = pd.Series(fDiaryLvl1.hh_ID.unique()).sort_values()
