@@ -1,5 +1,6 @@
 import pandas as pd
-from ExcelManager import foodsCalories
+import statistics as st
+#from ExcelManager import foodsCalories
 
 # agExtServices = pd.read_stata('./Datasets/01.AgriculturalExtensionServices.dta')
 # agProdLvl1 = pd.read_stata('./Datasets/02.AgriculturalProduction_level_1.dta')
@@ -34,33 +35,52 @@ fDiary2Link3 = fDiary1Link2.merge(fDiaryLvl3).sort_values(by=['hh_ID', 'week_num
 
 # fDiary2Link3.drop(fDiary2Link3.ix([:,''])
 # Deleting a range of columns
-householdIDLvl1 = pd.Series(fDiaryLvl1.hh_ID.unique())
+
+
 householdIDLinked = pd.Series(fDiaryLvl1.hh_ID.unique()).sort_values()
 weekNumbers = pd.Series(fDiaryLvl1.week_number.unique()).sort_values()
 unitsUsed = pd.Series(fDiaryLvl3.food_type_unit.unique())
-foodsList = pd.DataFrame(fDiary2Link3.food_type_name.unique(), columns=['food_type'])
+foodsList = pd.DataFrame(fDiary2Link3.food_type_name.unique(), columns=['food_type', 'calories', 'unit'])
 # The list of different foods which will be used to calculate calories
 foodGroups = pd.Series(fDiary2Link3.food_grp_namec.unique())
 # TODO: Find the calories for each food
 # TODO: Convert all of them to the same units, or have different calorie values for each food?
 # Conversion from weight to volume is not the same for each food type. Depending on the food, different units are used
-# TODO: Find which unit is common for each type of food, then create another column for units
+
 # TODO: Create a dataframe that has a household and 1 group for each food type by week (so it's hh_ID vs week)
-caloriesPerLiter = [2859.5]
-# foodsList.insert(1, 'calories', caloriesPerLiter)
+
 
 foodGroupsHousehold = pd.DataFrame(columns=weekNumbers, index=householdIDLinked)
-groupedFoodFDiary2Link3 = fDiary2Link3.groupby(['hh_ID', 'food_grp_namec', 'week_number'], as_index=False).sum()
-#for z in fDiary2Link3.index:
-    #if groupedFoodFDiary2Link3[z, 'food_grp_namec'] == 'meategg' or groupedFoodFDiary2Link3[z, 'food_grp_namec'] ==\
-     #'vegetables' or groupedFoodFDiary2Link3[z, 'food_grp_namec'] == 'dairy':
-        #foodGroupsHousehold.at[groupedFoodFDiary2Link3.loc[z, 'hh_ID'], groupedFoodFDiary2Link3.loc[z, 'week_number']]\
-            #= groupedFoodFDiary2Link3[z, 'food_type_quant']
-# TODO: Make sure the amount of the food group in one week is summed up, then inserted to the dataframe
-# TODO: Sum the amount of each food by food group
+foodGroupsHousehold = foodGroupsHousehold.fillna(0)
+grpFDiary2Link3 = fDiary2Link3.groupby(['hh_ID', 'food_grp_namec', 'week_number'], as_index=False).sum()
+# Adds the amount of food for each food group by week and hh_ID
+# TODO: Find which unit is common for each type of food, then create another column for units
 
-groupedIDAndWeek = fDiary2Link3.groupby(['hh_ID', 'week_number'], as_index=False).sum()
-# The sum() deletes any columns that are not ints
+for q in foodsList.index:
+    for u in fDiary2Link3.index:
+        tempList = pd.DataFrame()
+        if foodsList.loc[q, 'food_name'] == fDiary2Link3.loc[u, 'food_grp_namec']:
+            tempList.append(grpFDiary2Link3.loc[u, 'food_type_unit'])
+            foodsList.at[q, 'unit'] = st.mode(tempList)
+# Take the mode of the column, given it is part of q food group
+
+
+def food_group_sums(food_group, df):
+    for z in grpFDiary2Link3.index:
+        if grpFDiary2Link3.loc[z, 'food_grp_namec'] == food_group:
+            df.at[grpFDiary2Link3.loc[z, 'hh_ID'], grpFDiary2Link3.loc[z, 'week_number']] =\
+                grpFDiary2Link3.loc[z, 'food_type_quant']
+# Sums the amount of each food by food group per week
+
+
+meatEggGroup = pd.DataFrame()
+food_group_sums('meategg', meatEggGroup)
+vegetablesGroup = pd.DataFrame()
+food_group_sums('vegetables', vegetablesGroup)
+dairyGroup = pd.DataFrame()
+food_group_sums('dairy', dairyGroup)
+
+
 
 responseTest = pd.DataFrame(columns=weekNumbers, index=householdIDLinked)
 responseTest = responseTest.fillna(0)
