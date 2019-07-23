@@ -1,4 +1,5 @@
 import pandas as pd
+from ExcelManager import foodsCalories
 
 # agExtServices = pd.read_stata('./Datasets/01.AgriculturalExtensionServices.dta')
 # agProdLvl1 = pd.read_stata('./Datasets/02.AgriculturalProduction_level_1.dta')
@@ -12,8 +13,8 @@ import pandas as pd
 # cropsLvl3 = pd.read_stata('./Datasets/14.Crops_crop_level_3.dta')
 # cropsLvl4 = pd.read_stata('./Datasets/15.Crops_group_crop_i_croptype_level_4.dta')
 
-hhCompLvl1 = pd.read_stata('./Datasets/HouseholdComposition_level_1.dta')
-hhCompLvl2 = pd.read_stata('./Datasets/HouseholdComposition_members_level_2.dta')
+# hhCompLvl1 = pd.read_stata('./Datasets/HouseholdComposition_level_1.dta')
+# hhCompLvl2 = pd.read_stata('./Datasets/HouseholdComposition_members_level_2.dta')
 
 fDiaryLvl1 = pd.read_stata('./Datasets/33.FoodDiary_level_1.dta').sort_values(by=['hh_ID']).reset_index(drop=True)
 fDiaryLvl2 = pd.read_stata('./Datasets/34.FoodDiary_food_level_2.dta').sort_values(by=['hh_ID', 'food_1_ID',
@@ -50,11 +51,11 @@ caloriesPerLiter = [2859.5]
 
 foodGroupsHousehold = pd.DataFrame(columns=weekNumbers, index=householdIDLinked)
 groupedFoodFDiary2Link3 = fDiary2Link3.groupby(['hh_ID', 'food_grp_namec', 'week_number'], as_index=False).sum()
-for z in fDiary2Link3.index:
-    if groupedFoodFDiary2Link3[z, 'food_grp_namec'] == 'meategg' or groupedFoodFDiary2Link3[z, 'food_grp_namec'] ==\
-     'vegetables' or groupedFoodFDiary2Link3[z, 'food_grp_namec'] == 'dairy':
-        foodGroupsHousehold.at[groupedFoodFDiary2Link3.loc[z, 'hh_ID'], groupedFoodFDiary2Link3.loc[z, 'week_number']]\
-            = groupedFoodFDiary2Link3[z, 'food_type_quant']
+#for z in fDiary2Link3.index:
+    #if groupedFoodFDiary2Link3[z, 'food_grp_namec'] == 'meategg' or groupedFoodFDiary2Link3[z, 'food_grp_namec'] ==\
+     #'vegetables' or groupedFoodFDiary2Link3[z, 'food_grp_namec'] == 'dairy':
+        #foodGroupsHousehold.at[groupedFoodFDiary2Link3.loc[z, 'hh_ID'], groupedFoodFDiary2Link3.loc[z, 'week_number']]\
+            #= groupedFoodFDiary2Link3[z, 'food_type_quant']
 # TODO: Make sure the amount of the food group in one week is summed up, then inserted to the dataframe
 # TODO: Sum the amount of each food by food group
 
