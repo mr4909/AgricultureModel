@@ -1,5 +1,7 @@
 import pandas as pd
 import statistics as st
+import matplotlib.pyplot as plt
+import seaborn as sns
 #from ExcelManager import foodsCalories
 
 # agExtServices = pd.read_stata('./Datasets/01.AgriculturalExtensionServices.dta')
@@ -40,6 +42,7 @@ fDiary2Link3 = fDiary1Link2.merge(fDiaryLvl3).sort_values(by=['hh_ID', 'week_num
 householdIDLinked = pd.Series(fDiaryLvl1.hh_ID.unique()).sort_values()
 weekNumbers = pd.Series(fDiaryLvl1.week_number.unique()).sort_values()
 unitsUsed = pd.Series(fDiaryLvl3.food_type_unit.unique())
+# TODO: Create conversions for all the units into kg (make some generalizations)
 foodsList = pd.DataFrame(fDiary2Link3.food_type_name.unique(), columns=['food_type'])
 # The list of different foods which will be used to calculate calories
 foodGroups = pd.Series(fDiary2Link3.food_grp_namec.unique())
@@ -57,13 +60,15 @@ grpFDiary2Link3 = fDiary2Link3.groupby(['hh_ID', 'food_grp_namec', 'week_number'
 # TODO: Find which unit is common for each type of food, then create another column for units
 foodsList.insert(1, 'unit', ' ')
 
-for q in foodsList.index:
+'''for q in foodsList.index:
     for u in fDiary2Link3.index:
         tempList = pd.DataFrame()
         if foodsList.loc[q, 'food_type'] == fDiary2Link3.loc[u, 'food_grp_namec']:
             tempList.append(grpFDiary2Link3.loc[u, 'food_type_unit'])
-            foodsList.at[q, 'unit'] = st.mode(tempList)
+            foodsList.at[q, 'unit'] = st.mode(tempList)'''
 # Take the mode of the column, given it is part of q food group
+# TODO: Does not work: takes way too long and the unit column does not fill
+# TODO: Solution?- try sorting fDiary2Link3 by food group names, then splitting it into separate dataframes
 
 
 def food_group_sums(food_group, df):
@@ -76,11 +81,16 @@ def food_group_sums(food_group, df):
 
 meatEggGroup = pd.DataFrame()
 food_group_sums('meategg', meatEggGroup)
+meatEggGroup = meatEggGroup.sort_index(axis=1).transpose()
 vegetablesGroup = pd.DataFrame()
 food_group_sums('vegetables', vegetablesGroup)
+vegetablesGroup = vegetablesGroup.sort_index(axis=1).transpose()
 dairyGroup = pd.DataFrame()
 food_group_sums('dairy', dairyGroup)
+dairyGroup = dairyGroup.sort_index(axis=1).transpose()
 
+sns.heatmap(meatEggGroup, cmap='PiYG', vmax=500)
+plt.show()
 
 responseTest = pd.DataFrame(columns=weekNumbers, index=householdIDLinked)
 responseTest = responseTest.fillna(0)
