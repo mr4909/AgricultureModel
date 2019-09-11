@@ -37,7 +37,8 @@ foodGroups = pd.Series(fDiary2Link3.food_grp_namec.unique())
 # Conversion from weight to volume is not the same for each food type. Depending on the food, different units are used
 foodsCalories = pd.read_excel('FoodCalories.xlsx', sheet_name='Sheet1')
 # Calories for each food
-
+foodsCalories = foodsCalories.fillna(0)
+missingCalories = foodsCalories[foodsCalories.calories == 0]
 # TODO: Create a dataframe that has a household and 1 group for each food type by week (so it's hh_ID vs week)
 
 
