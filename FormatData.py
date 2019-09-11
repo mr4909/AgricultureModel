@@ -2,19 +2,7 @@ import pandas as pd
 import statistics as st
 import matplotlib.pyplot as plt
 import seaborn as sns
-#from ExcelManager import foodsCalories
 
-# agExtServices = pd.read_stata('./Datasets/01.AgriculturalExtensionServices.dta')
-# agProdLvl1 = pd.read_stata('./Datasets/02.AgriculturalProduction_level_1.dta')
-# agProdLvl2 = pd.read_stata('./Datasets/03.AgriculturalProduction_plot_repeat_begin_level_2.dta')
-# agProdLvl3 = pd.read_stata('./Datasets/04.AgriculturalProduction_crop_level_3.dta')
-# agProdLvl4 = pd.read_stata('./Datasets/05.AgriculturalProduction_group_crop_i_croptype_level_4.dta')
-# agSubsidyCard = pd.read_stata('./Datasets/06.AgriculturalSubsidyCard.dta')
-
-# cropsLvl1 = pd.read_stata('./Datasets/12.Crops_level_1.dta')
-# cropsLvl2 = pd.read_stata('./Datasets/13.Crops_plot_repeat_begin_level_2.dta')
-# cropsLvl3 = pd.read_stata('./Datasets/14.Crops_crop_level_3.dta')
-# cropsLvl4 = pd.read_stata('./Datasets/15.Crops_group_crop_i_croptype_level_4.dta')
 
 # hhCompLvl1 = pd.read_stata('./Datasets/HouseholdComposition_level_1.dta')
 # hhCompLvl2 = pd.read_stata('./Datasets/HouseholdComposition_members_level_2.dta')
@@ -42,13 +30,13 @@ fDiary2Link3 = fDiary1Link2.merge(fDiaryLvl3).sort_values(by=['hh_ID', 'week_num
 householdIDLinked = pd.Series(fDiaryLvl1.hh_ID.unique()).sort_values()
 weekNumbers = pd.Series(fDiaryLvl1.week_number.unique()).sort_values()
 unitsUsed = pd.Series(fDiaryLvl3.food_type_unit.unique())
-# TODO: Create conversions for all the units into kg (make some generalizations)
 foodsList = pd.DataFrame(fDiary2Link3.food_type_name.unique(), columns=['food_type'])
 # The list of different foods which will be used to calculate calories
 foodGroups = pd.Series(fDiary2Link3.food_grp_namec.unique())
 # TODO: Find the calories for each food
-# TODO: Convert all of them to the same units, or have different calorie values for each food?
 # Conversion from weight to volume is not the same for each food type. Depending on the food, different units are used
+foodsCalories = pd.read_excel('FoodCalories.xlsx', sheet_name='Sheet1')
+# Calories for each food
 
 # TODO: Create a dataframe that has a household and 1 group for each food type by week (so it's hh_ID vs week)
 
@@ -58,17 +46,15 @@ foodGroupsHousehold = foodGroupsHousehold.fillna(0)
 grpFDiary2Link3 = fDiary2Link3.groupby(['hh_ID', 'food_grp_namec', 'week_number'], as_index=False).sum()
 # Adds the amount of food for each food group by week and hh_ID
 # TODO: Find which unit is common for each type of food, then create another column for units
-foodsList.insert(1, 'unit', ' ')
-
-'''for q in foodsList.index:
-    for u in fDiary2Link3.index:
-        tempList = pd.DataFrame()
-        if foodsList.loc[q, 'food_type'] == fDiary2Link3.loc[u, 'food_grp_namec']:
-            tempList.append(grpFDiary2Link3.loc[u, 'food_type_unit'])
-            foodsList.at[q, 'unit'] = st.mode(tempList)'''
-# Take the mode of the column, given it is part of q food group
-# TODO: Does not work: takes way too long and the unit column does not fill
-# TODO: Solution?- try sorting fDiary2Link3 by food group names, then splitting it into separate dataframes
+mask = fDiary2Link3.crowdsource == 'Yes'
+noCrowdSource = fDiary2Link3[mask]
+crowdSource = fDiary2Link3[~mask]
+# TODO: How to then split these up by crowdsource and not crowdsource?
+# byWeekCrowd = fDiary2Link3[(fDiary2Link3.recall == 'week') and (fDiary2Link3.crowdsource == 'Yes')]
+# Above line does not work?
+byWeek = fDiary2Link3[fDiary2Link3.recall == 'week']
+byMonth = fDiary2Link3[fDiary2Link3.recall == 'month']
+bySeason = fDiary2Link3[fDiary2Link3.recall == 'season']
 
 
 def food_group_sums(food_group, df):
@@ -90,7 +76,12 @@ food_group_sums('dairy', dairyGroup)
 dairyGroup = dairyGroup.sort_index(axis=1).transpose()
 
 sns.heatmap(meatEggGroup, cmap='PiYG', vmax=500)
-plt.show()
+# plt.show()
+# TODO: Create graphs for other food groups
+# TODO: Look into how the color pallets work
+# TODO: Find a way to differentiate between no response and no food in the graphs
+# TODO: Normalize the graphs so it is food/person in each household instead of food/household
+# Some households may have more people than others, which is why they receive more food
 
 responseTest = pd.DataFrame(columns=weekNumbers, index=householdIDLinked)
 responseTest = responseTest.fillna(0)
