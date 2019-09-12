@@ -44,6 +44,27 @@ foodGroupsHousehold = foodGroupsHousehold.fillna(0)
 grpFDiary2Link3 = fDiary2Link3.groupby(['hh_ID', 'food_grp_namec', 'week_number'], as_index=False).sum()
 # Adds the amount of food for each food group by week and hh_ID
 
+# Unit conversions
+for x in fDiary2Link3.index:
+    if fDiary2Link3.loc[x, 'food_type_unit'] == 'Kg':
+        fDiary2Link3.loc[x, 'food_type_quant'] *= 1000
+    elif fDiary2Link3.loc[x, 'food_type_unit'] == 'Count':
+        fDiary2Link3.loc[x, 'food_type_quant'] *= 0.1
+        # Hard to determine what this conversion should be
+    elif fDiary2Link3.loc[x, 'food_type_unit'] == 'Teaspoon':
+        fDiary2Link3.loc[x, 'food_type_quant'] /= 4
+    elif fDiary2Link3.loc[x, 'food_type_unit'] == 'Drops':
+        fDiary2Link3.loc[x, 'food_type_quant'] *= 4
+    elif fDiary2Link3.loc[x, 'food_type_unit'] == 'Tablespoon':
+        fDiary2Link3.loc[x, 'food_type_quant'] *= 12
+    elif fDiary2Link3.loc[x, 'food_type_unit'] == 'Liter':
+        fDiary2Link3.loc[x, 'food_type_quant'] *= 1000
+    elif fDiary2Link3.loc[x, 'food_type_unit'] == 'Milliliter':
+        fDiary2Link3.loc[x, 'food_type_quant'] *= 1
+
+fDiary2Link3.food_type_unit = 'Grams'
+
+
 mask = fDiary2Link3.crowdsource == 'Yes'
 noCrowdSource = fDiary2Link3[mask]
 crowdSource = fDiary2Link3[~mask]
@@ -81,6 +102,7 @@ sns.heatmap(meatEggGroup, cmap='PiYG', vmax=500)
 # TODO: Find a way to differentiate between no response and no food in the graphs
 # TODO: Normalize the graphs so it is food/person in each household instead of food/household
 # Some households may have more people than others, which is why they receive more food
+
 
 responseTest = pd.DataFrame(columns=weekNumbers, index=householdIDLinked)
 responseTest = responseTest.fillna(0)
