@@ -66,8 +66,8 @@ fDiary2Link3.food_type_unit = 'Grams'
 
 
 mask = fDiary2Link3.crowdsource == 'Yes'
-noCrowdSource = fDiary2Link3[mask]
-crowdSource = fDiary2Link3[~mask]
+crowdSource = fDiary2Link3[mask]
+noCrowdSource = fDiary2Link3[~mask]
 
 cSWeekly = crowdSource[crowdSource.recall == 'week']
 cSMonthly = crowdSource[crowdSource.recall == 'month']
