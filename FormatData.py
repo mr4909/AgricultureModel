@@ -44,7 +44,7 @@ foodGroupsHousehold = foodGroupsHousehold.fillna(0)
 grpFDiary2Link3 = fDiary2Link3.groupby(['hh_ID', 'food_grp_namec', 'week_number'], as_index=False).sum()
 # Adds the amount of food for each food group by week and hh_ID
 
-# Unit conversions
+# Unit conversions - TODO: How to make this more efficient?
 for x in fDiary2Link3.index:
     if fDiary2Link3.loc[x, 'food_type_unit'] == 'Kg':
         fDiary2Link3.loc[x, 'food_type_quant'] *= 1000
@@ -63,6 +63,13 @@ for x in fDiary2Link3.index:
         fDiary2Link3.loc[x, 'food_type_quant'] *= 1
 
 fDiary2Link3.food_type_unit = 'Grams'
+
+hhMemberCount = hhCompLvl2[['hh_ID', 'member_1_ID']].set_index('hh_ID').groupby('hh_ID').count()
+
+for i in fDiary2Link3.index:
+    for u in hhMemberCount.index:
+        if fDiary2Link3.loc[i, 'hh_ID'] == u:
+            fDiary2Link3.at[i, 'food_type_quant'] /= u
 
 
 mask = fDiary2Link3.crowdsource == 'Yes'
