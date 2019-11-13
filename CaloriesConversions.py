@@ -31,9 +31,8 @@ foodsList = pd.DataFrame(fDiary2Link3.food_type_name.unique(), columns=['food_ty
 foodGroups = pd.Series(fDiary2Link3.food_grp_namec.unique())
 foodsCalories = pd.read_excel('FoodCalories.xlsx', sheet_name='Sheet1')
 # Calories for each food
-foodsCalories = foodsCalories.fillna(0)
+foodsCalories = foodsCalories.set_index(foodsCalories['food_type']).fillna(0).drop(columns=['Unnamed: 0', 'food_type'])
 missingCalories = foodsCalories[foodsCalories.calories == 0]
-
 
 foodGroupsHousehold = pd.DataFrame(columns=weekNumbers, index=householdIDLinked)
 foodGroupsHousehold = foodGroupsHousehold.fillna(0)
@@ -73,3 +72,22 @@ cSSeasonal = crowdSource[crowdSource.recall == 'season']
 noCSWeekly = noCrowdSource[noCrowdSource.recall == 'week']
 noCSMonthly = noCrowdSource[noCrowdSource.recall == 'month']
 noCSSeasonal = noCrowdSource[noCrowdSource.recall == 'season']
+
+
+def food_group_sums(food_group, df):
+    for z in grpFDiary2Link3.index:
+        if grpFDiary2Link3.loc[z, 'food_grp_namec'] == food_group:
+            df.at[grpFDiary2Link3.loc[z, 'hh_ID'], grpFDiary2Link3.loc[z, 'week_number']] =\
+                grpFDiary2Link3.loc[z, 'food_type_quant']
+# Sums the amount of each food by food group per week
+
+
+meatEggGroup = pd.DataFrame()
+food_group_sums('meategg', meatEggGroup)
+meatEggGroup = meatEggGroup.sort_index(axis=1).transpose()
+vegetablesGroup = pd.DataFrame()
+food_group_sums('vegetables', vegetablesGroup)
+vegetablesGroup = vegetablesGroup.sort_index(axis=1).transpose()
+dairyGroup = pd.DataFrame()
+food_group_sums('dairy', dairyGroup)
+dairyGroup = dairyGroup.sort_index(axis=1).transpose()

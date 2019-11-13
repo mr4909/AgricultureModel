@@ -3,30 +3,9 @@ import seaborn as sns
 from CaloriesConversions import *
 
 
-"""for i in fDiary2Link3.index:
-    for u in hhMemberCount.index:
-        if fDiary2Link3.loc[i, 'hh_ID'] == u:
-            fDiary2Link3.at[i, 'food_type_quant'] /= u"""
-
-
-def food_group_sums(food_group, df):
-    for z in grpFDiary2Link3.index:
-        if grpFDiary2Link3.loc[z, 'food_grp_namec'] == food_group:
-            df.at[grpFDiary2Link3.loc[z, 'hh_ID'], grpFDiary2Link3.loc[z, 'week_number']] =\
-                grpFDiary2Link3.loc[z, 'food_type_quant']
-# Sums the amount of each food by food group per week
-
-
-meatEggGroup = pd.DataFrame()
-food_group_sums('meategg', meatEggGroup)
-meatEggGroup = meatEggGroup.sort_index(axis=1).transpose()
-vegetablesGroup = pd.DataFrame()
-food_group_sums('vegetables', vegetablesGroup)
-vegetablesGroup = vegetablesGroup.sort_index(axis=1).transpose()
-dairyGroup = pd.DataFrame()
-food_group_sums('dairy', dairyGroup)
-dairyGroup = dairyGroup.sort_index(axis=1).transpose()
-
+#fDiary2Link3.set_index('food_type_quant').mul(foodsCalories.reindex(fDiary2Link3['food_type_name'])['calories'], axis=0).reset_index()
+#fDiary2Link3.assign(food_type_quant=fDiary2Link3.food_type_quant*(foodsCalories['calories'].reindex(fDiary2Link3.food_type_name).values))
+fDiary2Link3 = fDiary2Link3.assign(food_type_quant=fDiary2Link3.food_type_quant*fDiary2Link3.food_type_name.map(foodsCalories['calories']))
 sns.heatmap(meatEggGroup, cmap='PiYG', vmax=500)
 # plt.show()
 # TODO: Look into how the color pallets work
