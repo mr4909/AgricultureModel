@@ -36,8 +36,6 @@ missingCalories = foodsCalories[foodsCalories.calories == 0]
 
 foodGroupsHousehold = pd.DataFrame(columns=weekNumbers, index=householdIDLinked)
 foodGroupsHousehold = foodGroupsHousehold.fillna(0)
-grpFDiary2Link3 = fDiary2Link3.groupby(['hh_ID', 'food_grp_namec', 'week_number'], as_index=False).sum()
-# Adds the amount of food for each food group by week and hh_ID
 
 # Unit conversions - TODO: How to make this more efficient?
 for x in fDiary2Link3.index:
@@ -59,7 +57,19 @@ for x in fDiary2Link3.index:
 
 fDiary2Link3.food_type_unit = 'Grams'
 
+fDiary2Link3 = fDiary2Link3.assign(food_type_quant=fDiary2Link3.food_type_quant*fDiary2Link3.food_type_name
+                                   .map(foodsCalories['calories']))
+# Multiplies each food amount by the correct calorie multiplier
+grpFDiary2Link3 = fDiary2Link3.groupby(['hh_ID', 'food_grp_namec', 'week_number'], as_index=False).sum()
+# Adds the amount of food for each food group by week and hh_ID
+
 hhMemberCount = hhCompLvl2[['hh_ID', 'member_1_ID']].set_index('hh_ID').groupby('hh_ID').count()
+fDiary2Link3 = fDiary2Link3.assign(food_type_quant=fDiary2Link3.food_type_quant/fDiary2Link3.hh_ID
+                                   .map(hhMemberCount['member_1_ID']))
+# Divides by the number of members in each household
+# fDiary2Link3.drop(fDiary2Link3.columns[6:14, 20:73], axis=1, inplace=True)
+# TODO: Figure out how to delete a range of columns
+
 
 mask = fDiary2Link3.crowdsource == 'Yes'
 crowdSource = fDiary2Link3[mask]

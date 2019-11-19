@@ -1,13 +1,51 @@
 import pandas as pd
 import seaborn as sns
+import matplotlib.pyplot as plt
 from CaloriesConversions import *
 
 
-#fDiary2Link3.set_index('food_type_quant').mul(foodsCalories.reindex(fDiary2Link3['food_type_name'])['calories'], axis=0).reset_index()
-#fDiary2Link3.assign(food_type_quant=fDiary2Link3.food_type_quant*(foodsCalories['calories'].reindex(fDiary2Link3.food_type_name).values))
-fDiary2Link3 = fDiary2Link3.assign(food_type_quant=fDiary2Link3.food_type_quant*fDiary2Link3.food_type_name.map(foodsCalories['calories']))
-sns.heatmap(meatEggGroup, cmap='PiYG', vmax=500)
-# plt.show()
+def prep_heat_map(original):
+    df = pd.DataFrame()
+    for z in original.index:
+        df.at[original.loc[z, 'hh_ID'], original.loc[z, 'week_number']] = original.loc[z, 'food_type_quant']
+    return df.transpose()
+
+
+def create_heat_map(original):
+    df = sns.heatmap(prep_heat_map(original), cmap='PiYG', vmax=500)
+    df.set(xlabel='hh_ID', ylabel='week_number')
+    return df
+
+
+# csWeeklyHeat = sns.heatmap(prep_heat_map(cSWeekly), cmap='PiYG', vmax=500)
+
+plt.figure()
+cSWeeklyHeat = create_heat_map(cSWeekly)
+cSWeeklyHeat.set(title="cSWeekly")
+
+plt.figure()
+cSMonthlyHeat = create_heat_map(cSMonthly)
+cSMonthlyHeat.set(title='cSMonthly')
+
+plt.figure()
+cSSeasonalHeat = create_heat_map(cSSeasonal)
+cSSeasonalHeat.set(title='cSSeasonal')
+
+plt.figure()
+noCSWeeklyHeat = create_heat_map(noCSWeekly)
+noCSWeeklyHeat.set(title='noCSWeekly')
+
+plt.figure()
+noCSMonthlyHeat = create_heat_map(noCSMonthly)
+noCSMonthlyHeat.set(title='noCSMonthly')
+
+plt.figure()
+noCSSeasonalHeat = create_heat_map(noCSSeasonal)
+noCSSeasonalHeat.set(title='noCSSeasonal')
+
+plt.show()
+
+
 # TODO: Look into how the color pallets work
 # TODO: Find a way to differentiate between no response and no food in the graphs
 # TODO: Normalize the graphs so it is food/person in each household instead of food/household
