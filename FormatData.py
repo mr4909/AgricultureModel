@@ -8,7 +8,7 @@ def prep_heat_map(original):
     df = pd.DataFrame()
     for z in original.index:
         df.at[original.loc[z, 'hh_ID'], original.loc[z, 'week_number']] = original.loc[z, 'food_type_quant']
-    return df.transpose()
+    return df.transpose().sort_index()
 
 
 def create_heat_map(original):
