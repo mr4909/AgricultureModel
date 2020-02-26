@@ -17,8 +17,6 @@ def create_heat_map(original):
     return df
 
 
-# csWeeklyHeat = sns.heatmap(prep_heat_map(cSWeekly), cmap='PiYG', vmax=500)
-
 plt.figure()
 cSWeeklyHeat = create_heat_map(cSWeekly)
 cSWeeklyHeat.set(title="cSWeekly")
@@ -46,7 +44,6 @@ noCSSeasonalHeat.set(title='noCSSeasonal')
 plt.show()
 
 
-# TODO: Look into how the color pallets work
 # TODO: Find a way to differentiate between no response and no food in the graphs
 # TODO: Normalize the graphs so it is food/person in each household instead of food/household
 # Some households may have more people than others, which is why they receive more food
