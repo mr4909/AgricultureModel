@@ -1,0 +1,154 @@
+---
+title: "Bangladesh Food Diary"
+author: "Mari Roberts"
+date: "2/10/2020"
+output: pdf_document
+---
+
+```{r}
+# set wd
+mydirectory <- "/Users/mari/internship/AgricultureModel/Datasets"
+
+# load necessary packages
+requiredPackages = c('foreign', # read dta
+                     'dplyr',
+                     'haven',
+                     'readr') 
+
+for(p in requiredPackages){
+  if(!require(p,character.only = TRUE)) install.packages(p)
+  library(p,character.only = TRUE)
+}
+
+# read in each dta file
+filenames <- list.files(path="Datasets", pattern=".*dta")
+setwd(mydirectory)
+for (i in 1:length(filenames)){
+  assign(filenames[i], read_dta(paste("", filenames[i], sep=''))
+  )}
+}
+# remove NAs from HH members
+# hh_all <- HouseholdComposition_members_level_2.dta %>% filter(currentposition != "NA")
+
+hh_all <- HouseholdComposition_members_level_2.dta %>% select(hh_ID,
+                                                              member_1_ID,
+                                                              hhm_occu_type,
+                                                              hhm_occupation,
+                                                              canStandOwn = hhm_health1,
+                                                              canWalk5Km = hhm_health2,
+                                                              canCarry20L = hhm_health3)
+
+# factor variables
+hh_all$hhm_occu_type <- as.factor(hh_all$hhm_occu_type)
+hh_all$hhm_occupation <- as.factor(hh_all$hhm_occupation)
+# hh_all$canStandOwn <- as.factor(hh_all$canStandOwn)
+# hh_all$canWalk5Km <- as.factor(hh_all$canWalk5Km)
+# hh_all$canCarry20L <- as.factor(hh_all$canCarry20L)
+# str(hh_all)
+
+get_mode <- function(x){
+  return(names(sort(table(x), decreasing = T, na.last = T)[1:10]))
+}
+
+# top occupations
+get_mode(hh_all$hhm_occupation)
+
+# top occupation types
+get_mode(hh_all$hhm_occu_type)
+```
+
+*Top occupations:*
+Raising poultry  	farming = 443
+Raising livestock  	farming = 372
+Animal Breeder  	livestock = 223
+Small trader (roadside stand or stall)  	trader = 112
+Agricultural day labor  	wage = 97
+Farming = 76
+Student  	nonearning = 64
+Service (private sector )  	salaried = 53
+Small industry  	prod = 42
+Veterinary/paravet doctor  	livestock = 30
+
+*Top occupation types:*
+"nonearning" = 945
+"farming" = 299
+"trader" = 166
+"salaried" = 150
+"wage" = 124
+
+*Health Measures*
+
+0 = No
+1 = Yes
+77 = Don't know
+
+Combined 0 and 77 
+
+```{r}
+# differences in hh count and reported members in health measures
+# hh_tally <- hh_subset %>% group_by(hh_ID) %>% tally()
+# hh_report <- HouseholdComposition_level_1.dta %>% select(hh_ID, n=hh_members)
+# which(duplicated(hh_report) | duplicated(hh_report[nrow(hh_report):1, ])[nrow(hh_report):1])
+hh_count <- HouseholdComposition_level_1.dta %>% select(hh_ID, hh_members) 
+# reporting differences between hh_members throughout the year, likely deaths and births
+# hh_distinct <- hh_count %>% distinct(hh_ID, .keep_all = TRUE)
+# remove 101004 for now???
+# hh_count <- hh_count %>% filter(hh_ID != "101004")
+hh_count <- hh_count %>% distinct(hh_ID, .keep_all = TRUE)
+
+# combine 0 and 77 ("no" and "don't know")
+hh_all <- hh_all %>% mutate(canCarry20La = ifelse(canCarry20L==77 | canCarry20L==0, 0, 1),
+                                canWalk5Kma = ifelse(canWalk5Km==77 | canWalk5Km==0, 0, 1),
+                                canStandOwna = ifelse(canStandOwn==77 | canStandOwn==0, 0, 1))
+
+# count health measures per household
+hh_subset <- hh_all %>% select(hh_ID, canCarry20La, canWalk5Kma, canStandOwna)
+          carry <- hh_subset %>% group_by(hh_ID) %>% tally(canCarry20La)
+          walk <- hh_subset %>% group_by(hh_ID) %>% tally(canWalk5Kma)
+          stand <- hh_subset %>% group_by(hh_ID) %>% tally(canStandOwna)
+
+# determine percentage of health measure per household
+hh_cleaned <- merge(hh_count, carry, by = "hh_ID") 
+hh_cleaned <- merge(hh_cleaned, walk, by = "hh_ID") 
+hh_cleaned <- merge(hh_cleaned, stand, by = "hh_ID") 
+hh_cleaned <- hh_cleaned %>% select(hh_ID,
+                                    hh_members,
+                                    canCarry20L = n.x,
+                                    canWalk5Km = n.y,
+                                    canStandOwn = n) %>% 
+                             mutate(pctCanCarry20L = canCarry20L/hh_members,
+                                    pctCanWalk5Km = canWalk5Km/hh_members,
+                                    pctCanStandOwn = canStandOwn/hh_members)
+
+# remove percentages above 100, differences in number of members
+hh_final <- hh_cleaned %>% filter(pctCanCarry20L <= 1 &
+                                  pctCanWalk5Km <= 1 &
+                                  pctCanStandOwn <= 1)
+
+View(hh_final)
+```
+
+```{r}
+foodDiary <- `34.FoodDiary_food_level_2.dta` %>% select(hh_ID, food_grp_namec)
+table(foodDiary$food_grp_namec)                                                   
+```
+
+                      cereals          dairy         drinks      fishlarge 
+            80           3492            309            158           1182 
+     fishsmall         fruits       leafyveg        meategg            oil 
+           959            488           1504           2279           1373 
+otherfoodohome         pulses         spices     vegetables 
+           140           1648            234           3058 
+
+```{r}
+food_subset <- foodDiary %>% select(hh_ID, food_grp_namec)
+
+food <- food_subset %>%
+  group_by(hh_ID, food_grp_namec) %>%
+  summarise(n = n()) 
+
+# food1 %>% group_by(hh_ID, food_grp_namec) %>% summarise(Value = max(Value))
+food_summary <- food %>% group_by(hh_ID, food_grp_namec) %>% summarise(n = max(n))
+```
+
+
