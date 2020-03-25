@@ -5,6 +5,12 @@ date: "2/10/2020"
 output: pdf_document
 ---
 
+Caloric count? 500 peak makes sense?
+Monga
+
+Spreadsheet 
+Randomly select 
+
 ```{r}
 # set wd
 mydirectory <- "/Users/mari/internship/AgricultureModel/Datasets"
@@ -85,15 +91,8 @@ Veterinary/paravet doctor  	livestock = 30
 Combined 0 and 77 
 
 ```{r}
-# differences in hh count and reported members in health measures
-# hh_tally <- hh_subset %>% group_by(hh_ID) %>% tally()
-# hh_report <- HouseholdComposition_level_1.dta %>% select(hh_ID, n=hh_members)
-# which(duplicated(hh_report) | duplicated(hh_report[nrow(hh_report):1, ])[nrow(hh_report):1])
 hh_count <- HouseholdComposition_level_1.dta %>% select(hh_ID, hh_members) 
-# reporting differences between hh_members throughout the year, likely deaths and births
-# hh_distinct <- hh_count %>% distinct(hh_ID, .keep_all = TRUE)
-# remove 101004 for now???
-# hh_count <- hh_count %>% filter(hh_ID != "101004")
+# reporting differences between hh_members throughout the year, likely deaths and births?
 hh_count <- hh_count %>% distinct(hh_ID, .keep_all = TRUE)
 
 # combine 0 and 77 ("no" and "don't know")
@@ -125,30 +124,104 @@ hh_final <- hh_cleaned %>% filter(pctCanCarry20L <= 1 &
                                   pctCanWalk5Km <= 1 &
                                   pctCanStandOwn <= 1)
 
-View(hh_final)
+hh_final
 ```
+
+- connections change when thinking about health measures
 
 ```{r}
 foodDiary <- `34.FoodDiary_food_level_2.dta` %>% select(hh_ID, food_grp_namec)
 table(foodDiary$food_grp_namec)                                                   
 ```
 
-                      cereals          dairy         drinks      fishlarge 
-            80           3492            309            158           1182 
-     fishsmall         fruits       leafyveg        meategg            oil 
-           959            488           1504           2279           1373 
-otherfoodohome         pulses         spices     vegetables 
-           140           1648            234           3058 
+                      cereals          dairy         drinks      fishlarge      fishsmall 
+            80           3492            309            158           1182            959 
+        fruits       leafyveg        meategg            oil otherfoodohome         pulses 
+           488           1504           2279           1373            140           1648 
+        spices     vegetables 
+           234           3058 
 
 ```{r}
-food_subset <- foodDiary %>% select(hh_ID, food_grp_namec)
+food_summary <- foodDiary %>% select(hh_ID, food_grp_namec)
 
-food <- food_subset %>%
+food_max <- food_summary %>%
   group_by(hh_ID, food_grp_namec) %>%
   summarise(n = n()) 
 
-# food1 %>% group_by(hh_ID, food_grp_namec) %>% summarise(Value = max(Value))
-food_summary <- food %>% group_by(hh_ID, food_grp_namec) %>% summarise(n = max(n))
+food_max <- tbl_df(food_max) %>%
+      group_by(hh_ID) %>% 
+      filter(n==max(n))
+
+head(food_max)
+# unique(food_max$hh_ID) #420
 ```
+
+```{r}
+table(food_max$food_grp_namec)
+```
+
+Next see what was reported during good and bad shocks in Bangladesh.
+
+Droughts
+Weather patterns - precipitation - Alex
+Google Earth Engine?
+Actual vs percieved? Rainfall? What does this tell us about how to interpret perceptions in terms of extreme events vs baseline.
+Political events?
+Illnesses
+School attendance
+
+Do people eat more water-rich foods when they have little access to water?
+
+To Do:
+Histograms of variables
+What did people not want to report on
+Methodology papers
+
+*Facilities*
+
+Traveling time
+Types of facilities frequently visited
+
+```{r}
+
+```
+
+*Housing*
+
+Dec 2015 - Nov 2016
+
+```{r}
+housing_all <- `41. HousingandSanitation.dta` %>% select(hh_ID,
+                                                         cellphone,
+                                                         house_old, 
+                                                         house_sharing, 
+                                                         housewall_material, 
+                                                         housewall_material_other, 
+                                                         houseroof_material, 
+                                                         houseroof_material_other, 
+                                                         housefloor_material, 
+                                                         housefloor_material_other, 
+                                                         house_rooms, 
+                                                         house_rooms_sleeping, 
+                                                         house_elec, 
+                                                         house_supply_off, 
+                                                         fuel_source, 
+                                                         fuel_source_other, 
+                                                         lighting_source, 
+                                                         latrine_type, 
+                                                         latrine_other, 
+                                                         water_supply, 
+                                                         water_other_purpose, 
+                                                         water_other, 
+                                                         drinking_source_same, 
+                                                         drinking_source, 
+                                                         drinking_other, 
+                                                         water_purify, 
+                                                         water_purify_other, 
+                                                         handpump, 
+                                                         garbage, 
+                                                         garbage_other)
+```
+
 
 
