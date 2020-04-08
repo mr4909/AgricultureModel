@@ -1,0 +1,154 @@
+---
+title: "PCA"
+author: "Mari Roberts"
+date: "4/7/2020"
+output: pdf_document
+---
+
+```{r}
+# load necessary packages
+requiredPackages = c('foreign', # read dta
+                     'dplyr',
+                     'haven',
+                     'readr',
+                     'tidyverse') # missing values using map
+# only downloads packages if needed
+for(p in requiredPackages){
+  if(!require(p,character.only = TRUE)) install.packages(p)
+  library(p,character.only = TRUE)
+}
+
+# mydirectory <- "/Users/mari/AgricultureModel/Datasets"
+# setwd(mydirectory)
+# filenames <- list.files(path=mydirectory, pattern=".*dta")
+# df..list <- lapply(filenames, read_dta)
+#      list..res <- lapply(list(df..list), 
+#                 function(x) setDT(x)[,lapply(.SD,function(x) {  
+#          list(.N,sum(is.na(x)))}),by=hh_ID][,`:=`(index=1:.N,type=c("count", 
+#                                                               "no..na")),hh_ID])
+#      Reduce(function(x,y) merge(x,y,by=c("hh_ID","type","index")), list..res)
+
+# set wd
+mydirectory <- "/Users/mari/AgricultureModel/Datasets"
+setwd(mydirectory)
+
+filenames <- list.files(path=mydirectory, pattern=".*dta")
+
+# read in each dta file
+filenames <- list.files(path=mydirectory, pattern=".*dta")
+for (i in 1:length(filenames)){
+  assign(filenames[i], read_dta(paste("", filenames[i], sep=''))
+  )}
+
+# response rates, NAs, counts
+df_counts_NAs <- list.files(path=mydirectory, pattern=".*dta") %>%
+  map(~{
+    read_dta(.x) %>%
+      group_by(hh_ID) %>%
+      summarize_all(.funs = list(count = ~n(), NAs = ~sum(is.na(.))))
+  }) %>%
+  reduce(full_join)
+```
+
+# Questions Asked Once
+
+## Health, Sex, Literacy, Education
+
+```{r}
+##########################
+# Health by Person
+##########################
+
+hh_count <- HouseholdComposition_level_1.dta %>% select(hh_ID, member_1_ID, hh_members) 
+# reporting differences between hh_members throughout the year, likely deaths and births?
+hh_count <- hh_count %>% distinct(hh_ID, .keep_all = TRUE)
+
+hh_all <- HouseholdComposition_members_level_2.dta %>% mutate(height_meters = tot_height_inch*0.0254,
+                                                              canStandOwn = hhm_health1,
+                                                              canWalk5Km = hhm_health2,
+                                                              canCarry20L = hhm_health3)
+
+# BMI categories
+hh_all <- hh_all %>% mutate(bmi = (weight_kg/(height_meters^2)))
+
+# remove outliers for weight and height
+hh_all <- hh_all %>% filter(tot_height_inch >= 1 & tot_height_inch <= 100)
+hh_all <- hh_all %>% filter(weight_kg >= 1 & weight_kg <= 100)
+
+hh_all <- hh_all %>% mutate(bmiCategory = ifelse(bmi >= 30, "obese", 
+                                          ifelse(bmi >=25, "overweight", 
+                                          ifelse(bmi >=18.5, "normal", 
+                                          ifelse(bmi < 18.5, "underweight", NA)))))
+
+# combine 0 and 77 ("no" and "don't know")
+hh_all <- hh_all %>% mutate(canCarry20La = ifelse(canCarry20L==77 | canCarry20L==0, 0, 1),
+                            canWalk5Kma = ifelse(canWalk5Km==77 | canWalk5Km==0, 0, 1),
+                            canStandOwna = ifelse(canStandOwn==77 | canStandOwn==0, 0, 1))
+
+hh_respondent <- hh_all %>% filter(hhm_relation == 1)
+# 0 = male, 1 = female 
+# BMI (metric) = 1.3 x weight (kg) / height (m)^2.5
+hh_respondent <- hh_respondent %>% mutate(sex = ifelse(hhm_sex == 1,0,1)) %>% 
+                       select(hh_ID,
+                              member_1_ID,
+                              sex,
+                              age = hhm_age,
+                              maritalStatus = marital_status,
+                              literacy,
+                              education,
+                              attendingCollege = hhm_attending,
+                              occupationType = hhm_occu_type,
+                              canCarry20L = canCarry20La,
+                              canWalk5Km = canWalk5Kma,
+                              canStandOwn = canStandOwna,
+                              bmi,
+                              bmiCategory)
+
+# factor variables
+hh_respondent$sex = factor(hh_respondent$sex)
+hh_respondent$maritalStatus = factor(hh_respondent$maritalStatus)
+hh_respondent$literacy = factor(hh_respondent$literacy)
+hh_respondent$education = factor(hh_respondent$education)
+hh_respondent$occupationType = factor(hh_respondent$occupationType)
+hh_respondent$bmiCategory = factor(hh_respondent$bmiCategory)
+
+# logical variables
+hh_respondent$hhm_attending = factor(hh_respondent$hhm_attending)
+hh_respondent$canCarry20L = factor(hh_respondent$canCarry20L)
+hh_respondent$canWalk5Km = factor(hh_respondent$canWalk5Km)
+hh_respondent$canStandOwn = factor(hh_respondent$canStandOwn)
+
+
+##########################
+# Health by Household
+##########################
+
+# count health measures per household
+hh_subset <- hh_all %>% select(hh_ID, member_1_ID, bmi, canCarry20La, canWalk5Kma, canStandOwna)
+          carry <- hh_subset %>% group_by(hh_ID) %>% tally(canCarry20La)
+          walk <- hh_subset %>% group_by(hh_ID) %>% tally(canWalk5Kma)
+          stand <- hh_subset %>% group_by(hh_ID) %>% tally(canStandOwna)
+
+# determine percentage of health measure per household
+hh_health <- merge(hh_count, carry, by = "hh_ID") 
+hh_health <- merge(hh_health, walk, by = "hh_ID") 
+hh_health <- merge(hh_health, stand, by = "hh_ID") 
+hh_health <- hh_health %>% select(hh_ID,
+                                    member_1_ID,
+                                    hh_members,
+                                    canCarry20L = n.x,
+                                    canWalk5Km = n.y,
+                                    canStandOwn = n) %>% 
+                             mutate(pctCanCarry20L = canCarry20L/hh_members,
+                                    pctCanWalk5Km = canWalk5Km/hh_members,
+                                    pctCanStandOwn = canStandOwn/hh_members)
+
+# remove percentages above 100, differences in number of members
+hh_health <- hh_health %>% filter(pctCanCarry20L <= 1 &
+                                  pctCanWalk5Km <= 1 &
+                                  pctCanStandOwn <= 1) %>% select(-canCarry20L,-canWalk5Km,-canStandOwn)
+
+
+
+
+```
