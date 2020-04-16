@@ -1,0 +1,841 @@
+---
+title: "Economic Well-Being in Bagladesh"
+author: "Mari Roberts"
+date: "4/7/2020"
+output: pdf_document
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+# load necessary packages
+requiredPackages = c('foreign', # read dta
+                     'dplyr',
+                     'haven',
+                     'gridExtra',
+                     'readr',
+                     'dummies',
+                     'ggplot2', # plots
+                     'tidyverse') # missing values using map
+# only downloads packages if needed
+for(p in requiredPackages){
+  if(!require(p,character.only = TRUE)) install.packages(p)
+  library(p,character.only = TRUE)
+}
+
+# set wd
+mydirectory <- "/Users/mari/AgricultureModel/Datasets"
+setwd(mydirectory)
+
+filenames <- list.files(path=mydirectory, pattern=".*dta")
+
+# read in each dta file
+filenames <- list.files(path=mydirectory, pattern=".*dta")
+for (i in 1:length(filenames)){
+  assign(filenames[i], read_dta(paste("", filenames[i], sep=''))
+  )}
+
+# response rates, NAs, counts
+# df_counts_NAs <- list.files(path=mydirectory, pattern=".*dta") %>%
+#   map(~{
+#     read_dta(.x) %>%
+#       group_by(hh_ID) %>%
+#       summarize_all(.funs = list(count = ~n(), NAs = ~sum(is.na(.))))
+#   }) %>%
+#   reduce(full_join)
+```
+
+# Questions Asked Once
+
+## Health and Demographics
+
+```{r include=FALSE}
+##########################
+# Basic Info
+##########################
+
+# respondent_info <- Basicinformation.dta %>% select(hh_ID,
+#                                                    hh_head, # relationship to head of household
+#                                                    religion,
+#                                                    age)
+# remove outliers for age
+# respondent_info <- respondent_info %>% filter(age <= 100)
+
+#209 1 Self
+ # 31 2 Spouse
+ # 57 3 Child
+ # 7  4 Sibling
+ # 143 5 Parent
+
+ # 374 1 Muslim
+ # 72 2 Hindu
+ # 1 4 Buddhist
+
+hh_count <- HouseholdComposition_level_1.dta %>% select(hh_ID, member_1_ID, hh_members) 
+# reporting differences between hh_members throughout the year, likely deaths and births?
+hh_count <- hh_count %>% distinct(hh_ID, .keep_all = TRUE)
+
+hh_all <- HouseholdComposition_members_level_2.dta %>% mutate(height_meters = tot_height_inch*0.0254,
+                                                              canStandOwn = hhm_health1,
+                                                              canWalk5Km = hhm_health2,
+                                                              canCarry20L = hhm_health3)
+
+# BMI categories
+hh_all <- hh_all %>% mutate(bmi = (weight_kg/(height_meters^2)))
+
+# remove outliers for weight and height
+hh_all <- hh_all %>% filter(tot_height_inch >= 1 & tot_height_inch <= 100)
+hh_all <- hh_all %>% filter(weight_kg >= 1 & weight_kg <= 100)
+
+hh_all <- hh_all %>% mutate(bmiCategory = ifelse(bmi >= 30, "obese", 
+                                          ifelse(bmi >=25, "overweight", 
+                                          ifelse(bmi >=18.5, "normal", 
+                                          ifelse(bmi < 18.5, "underweight", NA)))))
+
+# combine 0 and 77 ("no" and "don't know")
+hh_all <- hh_all %>% mutate(canCarry20L = ifelse(canCarry20L==77 | canCarry20L==0, 0, 1),
+                            canWalk5Km = ifelse(canWalk5Km==77 | canWalk5Km==0, 0, 1),
+                            canStandOwn = ifelse(canStandOwn==77 | canStandOwn==0, 0, 1))
+
+# 0 = male, 1 = female 
+# BMI (metric) = 1.3 x weight (kg) / height (m)^2.5
+hh_all <- hh_all %>% mutate(sex = ifelse(hhm_sex == 1,0,1)) %>% 
+                       select(hh_ID,
+                              member_1_ID,
+                              hhm_relation,
+                              sex,
+                              age = hhm_age,
+                              maritalStatus = marital_status,
+                              literacy,
+                              education,
+                              attendingCollege = hhm_attending,
+                              occupationType = hhm_occu_type,
+                              canCarry20L,
+                              canWalk5Km,
+                              canStandOwn,
+                              bmi,
+                              bmiCategory)
+
+# factor variables
+hh_all$sex = factor(hh_all$sex)
+hh_all$maritalStatus = factor(hh_all$maritalStatus)
+hh_all$literacy = factor(hh_all$literacy)
+hh_all$education = factor(hh_all$education)
+hh_all$occupationType = factor(hh_all$occupationType)
+hh_all$bmiCategory = factor(hh_all$bmiCategory)
+
+# logical variables
+# hh_all$attendingCollege = factor(hh_all$attendingCollege)
+# hh_all$canCarry20L = factor(hh_all$canCarry20L)
+# hh_all$canWalk5Km = factor(hh_all$canWalk5Km)
+# hh_all$canStandOwn = factor(hh_all$canStandOwn)
+
+# does hh have children?
+hh_all <- hh_all %>% mutate(isChild = ifelse(age>=18, 0, 1))
+hh_children <- hh_all %>% group_by(hh_ID) %>% tally(isChild)
+hh_children <- hh_children %>% mutate(numChildren = n) %>% select(hh_ID, numChildren)
+
+# merge
+hh_all <- merge(hh_children, hh_all, by = "hh_ID")
+  
+####################
+# Data by resondents
+####################
+hh_respondent <- hh_all %>% filter(hhm_relation == 1)
+head(hh_respondent)
+```
+
+```{r}
+##########################
+# Health by Household
+##########################
+
+# count health measures per household
+hh_subset <- hh_all %>% select(hh_ID, member_1_ID, bmi, canCarry20L, canWalk5Km, canStandOwn)
+          carry <- hh_subset %>% group_by(hh_ID) %>% tally(canCarry20L)
+          walk <- hh_subset %>% group_by(hh_ID) %>% tally(canWalk5Km)
+          stand <- hh_subset %>% group_by(hh_ID) %>% tally(canStandOwn)
+
+# determine percentage of health measure per household
+hh_health <- merge(hh_count, carry, by = "hh_ID") 
+hh_health <- merge(hh_health, walk, by = "hh_ID") 
+hh_health <- merge(hh_health, stand, by = "hh_ID") 
+hh_health <- hh_health %>% select(hh_ID,
+                                    member_1_ID,
+                                    hh_members,
+                                    canCarry20L = n.x,
+                                    canWalk5Km = n.y,
+                                    canStandOwn = n) %>% 
+                             mutate(pctCanCarry20L = canCarry20L/hh_members,
+                                    pctCanWalk5Km = canWalk5Km/hh_members,
+                                    pctCanStandOwn = canStandOwn/hh_members)
+
+# remove percentages above 100, differences in number of members
+hh_health <- hh_health %>% filter(pctCanCarry20L <= 1 &
+                                  pctCanWalk5Km <= 1 &
+                                  pctCanStandOwn <= 1) %>% select(-canCarry20L,-canWalk5Km,-canStandOwn)
+
+hh_char <- merge(hh_health, hh_children, by = "hh_ID")
+head(hh_char)
+```
+
+## Housing Characteristics
+
+```{r}
+# housing and sanitation characteristics
+housing_all <- `41. HousingandSanitation.dta` 
+
+# respondent input year instead of years old
+housing_fix_year <- housing_all %>% arrange(desc(house_old))
+housing_fix_year <- head(housing_fix_year, 19)
+housing_fix_year <- housing_fix_year %>% select(hh_ID, house_old, today)
+housing_fix_year$today <- as.Date(housing_fix_year$today, "%b %d, %Y")
+housing_fix_year$submissionyear <- as.numeric(format(housing_fix_year$today,'%Y'))
+housing_fix_year<- housing_fix_year %>% mutate(house_age = submissionyear-house_old) %>% select(hh_ID, house_age)
+
+housing_all_not_fix_year <- housing_all %>% filter(hh_ID != 115161 &
+                                        hh_ID != 120230 &
+                                        hh_ID != 105055 &
+                                        hh_ID != 221250 &
+                                        hh_ID != 233386 &
+                                        hh_ID != 120238 &
+                                        hh_ID != 222252 &
+                                        hh_ID != 240474 &
+                                        hh_ID != 108087 &
+                                        hh_ID != 120228 &
+                                        hh_ID != 230349 &
+                                        hh_ID != 235414 &
+                                        hh_ID != 231368 &
+                                        hh_ID != 115165 &
+                                        hh_ID != 235407 &
+                                        hh_ID != 229339 &
+                                        hh_ID != 224284 &
+                                        hh_ID != 232370) %>% select(hh_ID, house_old)
+
+housing_all_not_fix_year <- housing_all_not_fix_year %>% mutate(house_age = house_old) %>% select(-house_old)
+housing_all_years_fixed <- merge(housing_all_not_fix_year, housing_fix_year, by = c("hh_ID"), all=TRUE)
+housing_all_years_fixed <- housing_all_years_fixed %>% select(hh_ID, house_age = house_age.x)
+
+housing_all <- housing_all %>% select(-sanitation_1_ID,-submissiondate,-expiration_date,
+                                      -max_submissions,-task_value,-task_length,-recall,
+                                      -recall_length,-crowdsource,-week_number,-start_time,
+                                      -end_time, -today, -start_date)
+
+housing_all <- merge(housing_all_years_fixed, housing_all, by = c("hh_ID"))
+```
+
+## Latrine and Water
+
+```{r}
+latrine_all <- `87. latrineUse.dta` %>% select(hh_ID, use_lat, main_use, count_latrine, pct_open)
+
+housing_all <- merge(latrine_all, housing_all, by = c("hh_ID"))
+```
+
+## Non-agricultural enterprise
+
+```{r}
+nonagricultural_enterprise <- `57. NonAgriculturalEnterprise_level_1.dta` %>% select(hh_ID, business)
+
+# merge with household characteristics
+housing_all <- merge(nonagricultural_enterprise, housing_all, by = c("hh_ID"))
+```
+
+## Facilities
+
+```{r}
+facilities <- `20. Facilities_level_1.dta` %>% select(hh_ID,facilities,fac_count)
+
+# there are too many variations on the types of facilities visited, so change to:
+# visits health centers, bazaar, local shops
+facilities$visits_healthcenter <- ifelse(grepl("1",facilities$facilities), 1, 0)
+facilities$visits_bazaar <- ifelse(grepl("6",facilities$facilities), 1, 0)
+facilities$visits_localshop <- ifelse(grepl("5",facilities$facilities), 1, 0)
+facilities <- facilities %>% select(-facilities)
+
+# merge with household characteristics
+housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
+```
+
+## Plots
+
+```{r}
+plots <- Plots_plot_level_2# fix year
+temp <- plots_level_1 %>% select(hh_ID, plot_1_ID, today) 
+plots <- merge(plots, temp, by=c("hh_ID","plot_1_ID"))
+
+plots$today <- format(as.Date(plots$today, format="%b %d, %Y"),"%Y")
+plots$yr_acq <- format(as.Date(plots$yr_acq, format="%b %d, %Y"),"%Y")  
+plots$today <- as.numeric(plots$today)
+plots$yr_acq <- as.numeric(plots$yr_acq)
+plots$plot_age <- plots$today - plots$yr_acq 
+
+# too many plot types (change to three types)
+plots$plot_type_homestead <- ifelse(grepl("1",plots$plot_type), 1, 0)
+cultivable_patterns <- c("2","8")
+plots$plot_type_cultivable_land_pond <- ifelse(grepl(paste(cultivable_patterns, collapse = "|"),plots$plot_type), 1, 0)
+other_patterns <- c("3","4","5","6","7","9"," ")
+plots$plot_type_other <- ifelse(grepl(paste(other_patterns, collapse = "|"),plots$plot_type), 1, 0)
+
+  
+plots <- plots %>%  select( hh_ID,
+                            plot_type_homestead,
+                            plot_type_cultivable_land_pond,
+                            plot_type_other,
+                            size_plot,
+                            flood_depth, # wrong units probably
+                            dis_from_home,
+                            soil_type,
+                            cur_opr_status,
+                            amt_rec,
+                            who_owns,
+                            who_owns_off,
+                            cur_mv,
+                            how_acq,
+                            plot_age,
+                            who_infra,
+                            plot_use,
+                            work_last_seas,
+                            who_decision,
+                            who_responsible,
+                            who_dec_spd)
+
+
+# merge with household characteristics
+housing_all <- merge(plots, housing_all, by = c("hh_ID"))
+```
+
+Remove nested questions
+```{r}
+housing_cleaned <- housing_all %>% select(-rent_paid, 
+                                          -drinking_source, 
+                                          -house_supply_off, 
+                                          -house_elec_cost, 
+                                          -fuel_source_other,
+                                          -drinking_source, 
+                                          -water_purify_other, 
+                                          -arsenic_check, 
+                                          #-water_purpose_other, 
+                                          -color_check)
+```
+
+# Missing Values
+```{r}
+# remove variables with most missing values
+housing_cleaned <- housing_cleaned %>% select(-work_last_seas, 
+                                              -who_responsible, 
+                                              -housewall_material_other, 
+                                              -houseroof_material_other, 
+                                              -housefloor_material_other, 
+                                              -lighting_source_other, 
+                                              -latrine_other, 
+                                              -water_other, 
+                                              -drinking_other, 
+                                              -garbage_other, 
+                                              -amt_rec,
+                                              -handpump)
+
+map(housing_cleaned, ~sum(is.na(.)))
+```
+
+# Recode Variables
+
+```{r}
+str(housing_cleaned)
+
+categorical_variables <- housing_cleaned %>% select(-size_plot, 
+                                                    -flood_depth, 
+                                                    -dis_from_home, 
+                                                    -cur_mv, 
+                                                    -plot_age, 
+                                                    -count_latrine, 
+                                                    -rent_estimate, 
+                                                    -house_old,
+                                                    -fuel_cost, 
+                                                    -lighting_cost, 
+                                                    -cell_cost, 
+                                                    -house_rooms, 
+                                                    -house_rooms_sleeping,
+                                                    -house_age, 
+                                                    -fac_count)
+continuous_variables <- housing_cleaned %>% select(hh_ID, 
+                                                      size_plot, 
+                                                      flood_depth, 
+                                                      dis_from_home, 
+                                                      cur_mv, 
+                                                      plot_age, 
+                                                      count_latrine, 
+                                                      rent_estimate, 
+                                                      house_old,
+                                                      fuel_cost, 
+                                                      lighting_cost, 
+                                                      cell_cost, 
+                                                      house_rooms, 
+                                                      house_rooms_sleeping,
+                                                      house_age, 
+                                                      fac_count)
+
+# factor variables
+
+categorical_variables <- categorical_variables %>% mutate_if(is.character,as.factor)
+categorical_variables <- categorical_variables %>% mutate_if(is.numeric,as.factor)
+categorical_variables$hh_ID <- as.integer(categorical_variables$hh_ID)
+str(categorical_variables)
+
+dummy_categorical_variables <- dummy.data.frame(categorical_variables)
+str(dummy_categorical_variables)
+
+dummy_continuous_variables <- dummy.data.frame(continuous_variables)
+str(dummy_continuous_variables)
+
+
+# Create dummy variables from x6
+# for(level in unique(x6)){
+#     data[paste("dummy", level, sep = "_")] <- ifelse(x6 == level, 1, 0)
+# }
+
+final_data <- merge(dummy_categorical_variables,dummy_continuous_variables, by="hh_ID")
+final_data <- final_data %>% mutate_if(is.numeric,as.factor)
+
+# Correlation matrix with appropriate coefficients
+# Pearson product-moment: 2 continuous variables
+# Point-biserial: 1 continuous and 1 binary variable
+# Phi: 2 binary variables
+# For testing purposes use hetcor function
+library(polycor)
+C <- as.matrix(hetcor(data=final_data))
+
+# Run PCA
+pca <- princomp(covmat=C)
+L <- loadings(pca)
+
+# Calculate Scores
+scores <- data * L
+```
+
+ $ plot_type_homestead           : num  0 1 0 0 0 0 0 0 0 0 ...
+ $ plot_type_cultivable_land_pond: num  1 0 1 0 0 1 1 1 1 0 ...
+ $ plot_type_other               : num  0 0 0 1 1 0 0 0 0 1 ...
+
+Who uses the plot?  
+  
+273   1 All members jointly
+191   2 Male household member
+2     3 Female household member
+4     4 Mamle outside household
+      5 Feale outside household
+9     6 Temporary user right
+      88 Not applicable/Not decided
+      
+      - all members, male, other
+
+ $ who_owns1                     : int  1 1 1 1 1 0 1 0 0 1 ...
+ $ who_owns1 2                   : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns1 2 3                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns1 2 4                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns1 2 5                 : int  0 0 0 0 0 0 0 0 1 0 ...
+ $ who_owns1 4                   : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns1 4 5                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns1 6                   : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns2                     : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns2 3                   : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns2 3 4                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns2 4                   : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns2 4 5                 : int  0 0 0 0 0 1 0 0 0 0 ...
+ $ who_owns2 4 6                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns4                     : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns6                     : int  0 0 0 0 0 0 0 1 0 0 ...
+ $ who_owns88                    : int  0 0 0 0 0 0 0 0 0 0 ...
+ 
+ 
+Who officially owns?
+
+151   1 All members jointly
+221   2 Male household member
+11    3 Female household member
+5     4 Male outside household
+10    6 Temporary user right
+1     7 Govt/Khas land/other institutions
+5     88 Not applicable/Not decided
+ 
+ $ who_owns_off                  : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off1                 : int  1 0 1 1 1 0 1 0 0 1 ...
+ $ who_owns_off1 2               : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off1 2 3             : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off1 2 4             : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off1 2 6             : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off1 2 88            : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off1 3 4             : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off1 6               : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off1 88              : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off2                 : int  0 1 0 0 0 0 0 0 1 0 ...
+ $ who_owns_off2 3               : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off2 4               : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off2 4 5             : int  0 0 0 0 0 1 0 0 0 0 ...
+ $ who_owns_off2 6               : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off3                 : int  0 0 0 0 0 0 0 1 0 0 ...
+ $ who_owns_off3 4               : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off4                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off6                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off7                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_owns_off88                : int  0 0 0 0 0 0 0 0 0 0 ...
+
+In last 12 months, who decided to build any infrastructure on this plot?
+
+256   1 All members jointly
+208   2 Male household member
+1     3 Female household member
+1     4 Male outside household
+3     6 Temporary user right
+1     7 Govt/Khas land/other institutions
+13    88 Not applicable/Not decided
+
+ $ who_infra1                    : int  1 1 1 1 0 0 1 0 0 1 ...
+ $ who_infra1 2                  : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra1 2 3                : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra1 2 4                : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra1 2 88               : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra1 4                  : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra1 4 6                : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra2                    : int  0 0 0 0 1 0 0 0 0 0 ...
+ $ who_infra2 3                  : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra2 3 4                : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra2 4                  : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra4                    : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra6                    : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra7                    : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_infra88                   : int  0 0 0 0 0 1 0 1 1 0 ...
+
+
+who_decision who takes most decisions regarding type of crop to be planted or fish to be raised?
+
+Male Decides (0,1)?????
+
+98    1 All members jointly
+135   2 Male household member
+1     4 Male outside household
+4     6 Temporary user right
+
+ $ who_decision                  : int  1 0 0 0 1 1 0 1 1 1 ...
+ $ who_decision1                 : int  0 1 1 1 0 0 1 0 0 0 ...
+ $ who_decision1 2               : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_decision1 2 3             : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_decision2                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_decision2 3               : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_decision2 3 4             : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_decision2 3 88            : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_decision4                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_decision6                 : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd                   : int  1 0 0 0 1 1 0 1 1 1 ...
+ $ who_dec_spd1                  : int  0 1 1 1 0 0 1 0 0 0 ...
+ $ who_dec_spd1 2                : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd1 2 3              : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd1 2 4              : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd2                  : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd2 3                : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd4                  : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd6                  : int  0 0 0 0 0 0 0 0 0 0 ...
+ 
+who decides how to spend revenues generated from crops or fish?
+
+121   1 All members jointly
+177   2 Male household member
+1     3 Female household member
+1     4 Male outside household
+1     6 Temporary user right
+1     88 Not applicable/Not decided
+
+ $ who_dec_spd                   : int  1 0 0 0 1 1 0 1 1 1 ...
+ $ who_dec_spd1                  : int  0 1 1 1 0 0 1 0 0 0 ...
+ $ who_dec_spd1 2                : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd1 2 3              : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd1 2 4              : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd2                  : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd2 3                : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd4                  : int  0 0 0 0 0 0 0 0 0 0 ...
+ $ who_dec_spd6                  : int  0 0 0 0 0 0 0 0 0 0 ...
+
+
+
+Weighting?, time variable
+zscore standardize ->weighting factor -> sensitivity analysis ---- diff weights
+
+divide of collective households?
+explain differences
+collective management leads to XYZ
+
+TEST
+compare variation - crowdsource vs respondent on one question
+
+
+IDEA
+
+"many tasks included a 'crowdsourcing' component, in which the respondent would complete the task first for him- or herself, and then repeat the task for any friend, neighbor, or passerby; these participants were ideally selected on an approximately random basis ... The purpose of the crowdsourcing component in the study was to examine whether a crowdsourced sample might demonstrate a reduced selection bias, and thus better approximate a true representative sample, than our purposive sample of potential early adopters."
+
+how similar the sample is to the crowdsourced one 
+- Select characteristics (e.g., age, gender, literacy, education, etc.) and even in terms of responses to a select number of questions.  
+
+If the personal characteristics are highly similar between the two samples, it may be that as suggested, selection bias is not reduced by crowdsourcing in this way and that, therefore, this particular type of crowdsourced sample does not yield a better approximation of a true representative sample as intended. 
+- Look at the distributions of the two samples in terms of these demographics, etc. and see which one better reflects the population to see which one is more representative.  
+
+Hypothesis: Individuals selected by respondents because they are friends, neighbors, or passersby, would tend to be similar in traits to the respondents and not provide the protection against selection bias that is proposed. 
+
+
+-----only crowdsourced sample has years of education
+----crowdsource might not be same every time
+
+
+
+
+
+
+
+
+
+
+# PCA
+
+PCA allows you to see the overall "shape" of the data, identifying which samples are similar to one another and which are very different. This can enable us to identify groups of samples that are similar and work out which variables make one group different from another.
+
+https://uc-r.github.io/pca
+
+```{r}
+new_data <- dummy.data.frame(final_data, names = c("housewall_material","houseroof_material","housefloor_material","house_elec","fuel_source","lighting_source","latrine_type","water_supply","drinking_source_same","water_purify","garbage"))
+str(new_data)
+new_data <- new_data %>% select(-hh_ID)
+
+scaled_df <- apply(new_data, 2, scale)
+head(scaled_df)
+
+# remove NAs
+row.has.na <- apply(scaled_df, 1, function(x){any(is.na(x))})
+final.filtered <- scaled_df[!row.has.na,]
+
+hh.cov <- cov(final.filtered)
+hh.eigen <- eigen(hh.cov)
+str(hh.eigen)
+
+# Extract the loadings
+(phi <- hh.eigen$vectors[,1:2])
+
+phi <- -phi
+row.names(phi) <- c("house_age","cellphone","house_sharing","housewall_material1", "housewall_material2","housewall_material3","housewall_material4","housewall_material5","houseroof_material1",
+"houseroof_material2","houseroof_material3","houseroof_material4","houseroof_material5","houseroof_material6",
+"houseroof_material7","housefloor_material1","housefloor_material2","housefloor_material3","housefloor_material4",
+"housefloor_material5","housefloor_material99", "house_rooms","house_rooms_sleeping","house_elec0",
+"house_elec1","fuel_source1","fuel_source2","fuel_source3","fuel_source4",
+"fuel_source5","fuel_source6","fuel_source7","fuel_source8","fuel_source9",
+"fuel_source99","lighting_source1","lighting_source3","lighting_source4","lighting_source5",
+"lighting_source99","latrine_type1","latrine_type2","latrine_type3","latrine_type4",
+"latrine_type5","latrine_type6","latrine_type99","water_supply0","water_supply1",
+"drinking_source_same0","drinking_source_same1" ,"water_purify1","water_purify2","water_purify3",
+"water_purify4","water_purify5","water_purify99","garbage1","garbage2",
+"garbage3","garbage4","garbage5","garbage6","garbage7",
+"garbage8","hh_members","pctCanCarry20L","pctCanWalk5Km","pctCanStandOwn",
+"caloricFake")
+colnames(phi) <- c("PC1", "PC2")
+
+# Calculate Principal Components scores
+PC1 <- as.matrix(scaled_df) %*% phi[,1]
+PC2 <- as.matrix(scaled_df) %*% phi[,2]
+
+# Create data frame with Principal Components scores
+PC <- data.frame(hh_ID = row.names(final_data), PC1, PC2)
+head(PC)
+
+# Plot Principal Components for each HH
+PCAplot <- ggplot(PC, aes(PC1, PC2)) + 
+  modelr::geom_ref_line(h = 0) +
+  modelr::geom_ref_line(v = 0) +
+  geom_text(aes(label = hh_ID), size = 3) +
+  xlab("First Principal Component") + 
+  ylab("Second Principal Component") + 
+  ggtitle("First Two Principal Components of HH Data")
+PCAplot
+```
+
+```{r}
+pca_result <- prcomp(final.filtered, scale = FALSE)
+names(pca_result)
+# means
+pca_result$center
+# standard deviations
+pca_result$scale
+# provides the principal component loadings
+pca_result$rotation 
+pca_result$rotation <- -pca_result$rotation
+pca_result$rotation
+
+pca_result$x <- - pca_result$x
+head(pca_result$x)
+
+biplot(pca_result, scale = 0)
+```
+
+```{r}
+pca_result$sdev # standard deviation of each principal component
+VE <- pca_result$sdev^2 # variance explained by each principal component is obtained by squaring these values
+
+# proportion of variance explained by each principal component
+PVE <- VE / sum(VE)
+round(PVE, 2)
+```
+
+ [1] 0.07 0.06 0.05 0.04 0.04 0.03 0.03 0.03 0.03 0.03 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.01
+[30] 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+[59] 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+
+ordered factor variables
+recode dummies
+
+
+
+
+
+
+
+
+
+# Agriculture 
+
+01. AgriculturalExtensionServices.dta
+02. AgriculturalProduction_level_1.dta
+03. AgriculturalProduction_plot_repeat_begin_level_2.dta
+04. AgriculturalProduction_crop_level_3.dta
+06. AgriculturalSubsidyCard.dta
+
+```{r}
+
+agriculture <- `01. AgriculturalExtensionServices.dta`
+
+# agriculture_NAs <- agriculture %>%
+#   group_by(hh_ID) %>% 
+#   summarize_all(.funs = list(count = ~n(), NAs = ~sum(is.na(.))))
+
+
+```
+
+###07. BadShocks_level_1.dta
+###08. BadShocks_event_repeat_level_2.dta
+
+###09. ClimateEvent.dta
+
+###10. Cosmetics_level_1.dta
+###11. Cosmetics_item_repeat_level_2.dta
+
+###12. Crops_level_1.dta
+###13. Crops_plot_repeat_begin_level_2.dta
+###14. Crops_crop_level_3.dta
+###15. Crops_group_crop_i_croptype_level_4.dta
+
+###16. CurrentMigrants_level_1.dta
+###17. CurrentMigrants_begin_repeat_mig_level_2.dta
+
+###18. DrinkingWater_level_1.dta
+###19. DrinkingWater_source_level_2.dta
+
+###20. Facilities_level_1.dta
+###21. Facilities_facility_repeat_level_2.dta
+
+###22. FertilizersAndPesticides_level_1.dta
+###23. FertilizersAndPesticides_plot_repeat_begin_level_2.dta
+###24. FertilizersAndPesticides_crop_level_3.dta
+###25. FertilizersAndPesticides_group_crop_i_croptype_level_4.dta
+###26. FertilizersAndPesticides_rep_fert_level_5.dta
+
+###27. FishPondInputs_level_1.dta
+###28. FishPondInputs_begin_level_2.dta
+###29. FishPondProduction_level_1.dta
+###30. FishPondProduction_pond_begin_repeat_level_2.1.dta
+###31. FishPondProduction_river_repeat_level_2.2.dta
+###32. FishPondProduction_fish_repeat_level_3.dta
+
+###33. FoodDiary_level_1.dta
+###34. FoodDiary_food_level_2.dta
+###35. Fooddiary_food_foodtype_level_3.dta
+###36. FoodStorageCapacity.dta
+
+###37. FuelLighting_level_1.dta
+###38. FuelLighting_item_repeat_level_2.dta
+
+###39. GoodShocks_level_1.dta
+###40. GoodShocks_event_repeat_level_2.dta
+
+###41. HousingandSanitation.dta
+
+###42. InformationTools_level_1.dta
+###43. InformationTools_tech_level_2.dta
+###44. InformationTools_tech_use_level_3.dta
+
+###45. Irrigation_level_1.dta
+###46. Irrigation_plot_repeat_begin_level_2.dta
+###47. Irrigation_crop_level_3.dta
+###48. Irrigation_group_crop_i_crop_repeat_type_level_4.dta
+
+###49. Livestock_level_1.dta
+###50. Livestock_animal_level_2.dta
+
+###51. Loans_level_1.dta
+###52. Loans_each_loan_level_2.dta
+
+###53. Marketing_level_1.dta
+###54. Marketing_sellrell_prod_repeat_level_2.dta
+
+###55. MobileInternet_level_1.dta
+###56. MobileInternet_app_use_level_2.dta
+
+###57. NonAgriculturalEnterprise_level_1.dta
+###58. NonAgriculturalEnterprise_buss_level_2.dta
+
+###59. OtherIncome_level_1.dta
+
+###60. OtherIncome_income_level_2.dta
+
+###61. RemittanceIn_level_1.dta
+###62. RemittanceIn_begin_repeat_mig_level_2.dta
+###63. RemittanceOut_level_1.dta
+###64. RemittanceOut_begin_repeat_mig_level_2.dta
+
+###65. SafetyProgram_level_1.dta
+###66. SafetyProgram_event_repeat_level_2.dta
+
+###67. Savings_level_1.dta
+###68. Savings_each_savings_level_2.dta
+
+###69. SubjectiveWellbeing.dta
+
+###70. TransportTravel_level_1.dta
+###71. TransportTravel_item_repeat_level_2.dta
+###72. TransportationTools_level_1.dta
+###73. TransportationTools_transport_level_2.dta
+###74. TransportationTools_transport_use_level_3.dta
+
+###75. WashingCleaning_level_1.dta
+###76. WashingCleaning_item_repeat_level_2.dta
+
+###77. WorkAnimals_level_1.dta
+###78. WorkAnimals_animals_level_2.dta
+###79. WorkAnimals_animals_use_level_3.dta
+
+###80. employment_level_1.dta
+###81. employment_work_done_level_2.dta
+
+###82. farmLabor_level_1.dta
+###83. farmLabor_begin_repeat_plot_level_2.dta
+###84. farmLabor_labor_repeat_level_3.dta
+
+###85. illness_level_1.dta
+###86. illness_was_ill_level_2.dta
+
+###87. latrineUse.dta
+###88. latrineWalk_level_1.dta
+###89. latrineWalk_begin_repeat_lat_level_2.dta
+
+###90. rentingToolsMachAn_level_1.dta
+###91. rentingToolsMachAn_plot_repeat_begin_level_2.dta
+###92. rentingToolsMachAn_crop_level_3.dta
+###93. rentingToolsMachAn_group_crop_i_crop_repeat_type_level_4.dta
+
+###94. schoolAttendance_level_1.dta
+###95. schoolAttendance_missed_school_level_2.dta
+
+###96. tubewellWalk_level_1.dta
+###97. tubewellWalk_begin_repeat_tw_level_2.dta
