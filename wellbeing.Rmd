@@ -13,6 +13,7 @@ requiredPackages = c('foreign', # read dta
                      'gridExtra',
                      'readr',
                      'dummies',
+                     'data.table',
                      'ggplot2', # plots
                      'tidyverse') # missing values using map
 # only downloads packages if needed
@@ -45,9 +46,11 @@ for (i in 1:length(filenames)){
 
 # Questions Asked Once
 
-## Health and Demographics
-
 ```{r include=FALSE}
+####################################################
+## Health and Demographics
+####################################################
+
 ##########################
 # Basic Info
 ##########################
@@ -136,14 +139,11 @@ hh_children <- hh_children %>% mutate(numChildren = n) %>% select(hh_ID, numChil
 # merge
 hh_all <- merge(hh_children, hh_all, by = "hh_ID")
   
-####################
+##########################
 # Data by resondents
-####################
+##########################
 hh_respondent <- hh_all %>% filter(hhm_relation == 1)
-head(hh_respondent)
-```
 
-```{r}
 ##########################
 # Health by Household
 ##########################
@@ -174,14 +174,38 @@ hh_health <- hh_health %>% filter(pctCanCarry20L <= 1 &
                                   pctCanStandOwn <= 1) %>% select(-canCarry20L,-canWalk5Km,-canStandOwn)
 
 hh_char <- merge(hh_health, hh_children, by = "hh_ID")
-head(hh_char)
+hh_char <- hh_char %>% select(-member_1_ID)
+
+# TRUE, if there are no duplicates in hh_ID
+length(unique(hh_char$hh_ID)) == nrow(hh_char)
 ```
 
-## Housing Characteristics
-
 ```{r}
+####################################################
+## Housing Characteristics
+####################################################
+
 # housing and sanitation characteristics
 housing_all <- `41. HousingandSanitation.dta` 
+
+
+# 113148 120225 221250 224277 more than one entry
+# probably need to figure out how to get rid of these. Max date?????????
+# housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+# housing_all <- housing_all %>% filter(hh_ID != 113148 &
+#                                       hh_ID != 120225 &
+#                                       hh_ID != 221250 &
+#                                       hh_ID != 224277)
+
+##########
+# if there is a hh_ID duplicate, use the first entry
+##########
+# TRUE, if there are no duplicates in hh_ID
+length(unique(housing_all$hh_ID)) == nrow(housing_all)
+housing_all$submissiondate <- as.Date(housing_all$submissiondate, "%b %d, %Y")
+housing_all <- setDT(housing_all)[housing_all[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+housing_all <- housing_all %>% select(-submissiondate)
+##########
 
 # respondent input year instead of years old
 housing_fix_year <- housing_all %>% arrange(desc(house_old))
@@ -214,35 +238,68 @@ housing_all_not_fix_year <- housing_all_not_fix_year %>% mutate(house_age = hous
 housing_all_years_fixed <- merge(housing_all_not_fix_year, housing_fix_year, by = c("hh_ID"), all=TRUE)
 housing_all_years_fixed <- housing_all_years_fixed %>% select(hh_ID, house_age = house_age.x)
 
-housing_all <- housing_all %>% select(-sanitation_1_ID,-submissiondate,-expiration_date,
+housing_all <- housing_all %>% select(-sanitation_1_ID,-expiration_date,
                                       -max_submissions,-task_value,-task_length,-recall,
                                       -recall_length,-crowdsource,-week_number,-start_time,
                                       -end_time, -today, -start_date)
 
 housing_all <- merge(housing_all_years_fixed, housing_all, by = c("hh_ID"))
-```
 
+####################################################
 ## Latrine and Water
+####################################################
 
-```{r}
-latrine_all <- `87. latrineUse.dta` %>% select(hh_ID, use_lat, main_use, count_latrine, pct_open)
+latrine_all <- `87. latrineUse.dta` %>% select(hh_ID, submissiondate, use_lat, main_use, count_latrine, pct_open)
+
+##########
+# if there is a hh_ID duplicate, use the first entry
+##########
+latrine_all$submissiondate <- as.Date(latrine_all$submissiondate, "%b %d, %Y")
+latrine_all <- setDT(latrine_all)[latrine_all[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+latrine_all <- latrine_all %>% select(-submissiondate)
+##########
 
 housing_all <- merge(latrine_all, housing_all, by = c("hh_ID"))
-```
 
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+
+####################################################
 ## Non-agricultural enterprise
+####################################################
 
-```{r}
-nonagricultural_enterprise <- `57. NonAgriculturalEnterprise_level_1.dta` %>% select(hh_ID, business)
+# Anyone in household owned/operated any business in 12 months?
+nonagricultural_enterprise <- `57. NonAgriculturalEnterprise_level_1.dta` %>% select(hh_ID, submissiondate, business)
+
+##########
+# if there is a hh_ID duplicate, use the first entry
+##########
+nonagricultural_enterprise$submissiondate <- as.Date(nonagricultural_enterprise$submissiondate, "%b %d, %Y")
+nonagricultural_enterprise <- setDT(nonagricultural_enterprise)[nonagricultural_enterprise[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+nonagricultural_enterprise <- nonagricultural_enterprise %>% select(-submissiondate)
+##########
 
 # merge with household characteristics
 housing_all <- merge(nonagricultural_enterprise, housing_all, by = c("hh_ID"))
-```
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+str(housing_all)
 
+#################
+# ordered factor variables
+#################
+
+housing_all$pct_open <- factor(housing_all$pct_open, ordered = TRUE)
+# What kind of toilet facility do members of your household use most of the time?
+housing_all$main_use <- factor(housing_all$main_use, ordered = TRUE)
+# house wall, roof, and floor
+housing_all$housewall_material <- factor(housing_all$housewall_material, ordered = TRUE)
+housing_all$houseroof_material <- factor(housing_all$houseroof_material, ordered = TRUE)
+housing_all$housefloor_material <- factor(housing_all$housefloor_material, ordered = TRUE)
+
+####################################################
 ## Facilities
+####################################################
 
-```{r}
-facilities <- `20. Facilities_level_1.dta` %>% select(hh_ID,facilities,fac_count)
+facilities <- `20. Facilities_level_1.dta` %>% select(hh_ID,submissiondate, facilities,fac_count)
 
 # there are too many variations on the types of facilities visited, so change to:
 # visits health centers, bazaar, local shops
@@ -251,15 +308,25 @@ facilities$visits_bazaar <- ifelse(grepl("6",facilities$facilities), 1, 0)
 facilities$visits_localshop <- ifelse(grepl("5",facilities$facilities), 1, 0)
 facilities <- facilities %>% select(-facilities)
 
+##########
+# if there is a hh_ID duplicate, use the first entry
+##########
+facilities$submissiondate <- as.Date(facilities$submissiondate, "%b %d, %Y")
+facilities <- setDT(facilities)[facilities[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+facilities <- facilities %>% select(-submissiondate)
+##########
+
 # merge with household characteristics
 housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
-```
 
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+
+####################################################
 ## Plots
+####################################################
 
-```{r}
-plots <- Plots_plot_level_2# fix year
-temp <- plots_level_1 %>% select(hh_ID, plot_1_ID, today) 
+plots <- Plots_plot_level_2.dta # fix year
+temp <- plots_level_1.dta %>% select(hh_ID, submissiondate, plot_1_ID, today) 
 plots <- merge(plots, temp, by=c("hh_ID","plot_1_ID"))
 
 plots$today <- format(as.Date(plots$today, format="%b %d, %Y"),"%Y")
@@ -270,12 +337,53 @@ plots$plot_age <- plots$today - plots$yr_acq
 
 # too many plot types (change to three types)
 plots$plot_type_homestead <- ifelse(grepl("1",plots$plot_type), 1, 0)
-cultivable_patterns <- c("2","8")
-plots$plot_type_cultivable_land_pond <- ifelse(grepl(paste(cultivable_patterns, collapse = "|"),plots$plot_type), 1, 0)
-other_patterns <- c("3","4","5","6","7","9"," ")
-plots$plot_type_other <- ifelse(grepl(paste(other_patterns, collapse = "|"),plots$plot_type), 1, 0)
+temp <- c("2","8")
+plots$plot_type_cultivable_land_pond <- ifelse(grepl(paste(temp, collapse = "|"),plots$plot_type), 1, 0)
+temp <- c("3","4","5","6","7","9"," ")
+plots$plot_type_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$plot_type), 1, 0)
 
-  
+# who_owns - too many factor levels (change to three types)
+plots$who_owns_male <- ifelse(grepl("1",plots$who_owns), 1, 0)
+plots$who_owns_family <- ifelse(grepl("2",plots$who_owns), 1, 0)
+temp <- c("3","4","5","6")
+plots$who_owns_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_owns), 1, 0)
+
+# who_owns_off - too many factor levels (change to three types)
+plots$who_owns_off_male <- ifelse(grepl("1",plots$who_owns_off), 1, 0)
+plots$who_owns_off_family <- ifelse(grepl("2",plots$who_owns_off), 1, 0)
+temp <- c("3","4","5","6")
+plots$who_owns_off_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_owns_off), 1, 0)
+ 
+# who_decision - too many factor levels (change to three types)
+plots$who_decision_male <- ifelse(grepl("1",plots$who_decision), 1, 0)
+plots$who_decision_family <- ifelse(grepl("2",plots$who_decision), 1, 0)
+temp <- c("3","4","5","6")
+plots$who_decision_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_decision), 1, 0)
+
+# who_responsible - not enough responses
+
+# who_dec_spd - too many factor levels (change to three types)
+plots$who_dec_spd_male <- ifelse(grepl("1",plots$who_dec_spd), 1, 0)
+plots$who_dec_spd_family <- ifelse(grepl("2",plots$who_dec_spd), 1, 0)
+temp <- c("3","4","5","6")
+plots$who_dec_spd_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_dec_spd), 1, 0)
+
+# who_infra - too many factor levels (change to three types)
+plots$who_infra_male <- ifelse(grepl("1",plots$who_infra), 1, 0)
+plots$who_infra_family <- ifelse(grepl("2",plots$who_infra), 1, 0)
+temp <- c("3","4","5","6")
+plots$who_infra_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_infra), 1, 0)
+
+##########
+# if there is a hh_ID duplicate, use the first entry
+##########
+# 100+ duplicates
+plots$hh_ID[duplicated(plots$hh_ID)]
+plots$submissiondate <- as.Date(plots$submissiondate, "%b %d, %Y")
+plots <- setDT(plots)[plots[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+plots <- plots %>% select(-submissiondate)
+##########
+
 plots <- plots %>%  select( hh_ID,
                             plot_type_homestead,
                             plot_type_cultivable_land_pond,
@@ -286,24 +394,38 @@ plots <- plots %>%  select( hh_ID,
                             soil_type,
                             cur_opr_status,
                             amt_rec,
-                            who_owns,
-                            who_owns_off,
                             cur_mv,
                             how_acq,
                             plot_age,
-                            who_infra,
                             plot_use,
                             work_last_seas,
-                            who_decision,
-                            who_responsible,
-                            who_dec_spd)
-
+                            # In last 12 months, who decided to build any infrastructure on this plot?
+                            who_infra_male,
+                            who_infra_family,
+                            who_infra_other,
+                            # Who uses the plot?  
+                            who_owns_male,
+                            who_owns_family,
+                            who_owns_other,
+                            # Who officially owns?
+                            who_owns_off_male,
+                            who_owns_off_family,
+                            who_owns_off_other,
+                            # who_decision who takes most decisions regarding type of crop to be planted or fish to be raised?
+                            who_decision_male,
+                            who_decision_family,
+                            who_decision_other,
+                            # who decides how to spend revenues generated from crops or fish?
+                            who_dec_spd_male,
+                            who_dec_spd_family,
+                            who_dec_spd_other)
 
 # merge with household characteristics
 housing_all <- merge(plots, housing_all, by = c("hh_ID"))
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 ```
 
-Remove nested questions
+## Remove nested and NA questions
 ```{r}
 housing_cleaned <- housing_all %>% select(-rent_paid, 
                                           -drinking_source, 
@@ -315,13 +437,10 @@ housing_cleaned <- housing_all %>% select(-rent_paid,
                                           -arsenic_check, 
                                           #-water_purpose_other, 
                                           -color_check)
-```
 
-# Missing Values
-```{r}
 # remove variables with most missing values
 housing_cleaned <- housing_cleaned %>% select(-work_last_seas, 
-                                              -who_responsible, 
+                                              #-who_responsible, 
                                               -housewall_material_other, 
                                               -houseroof_material_other, 
                                               -housefloor_material_other, 
@@ -333,15 +452,16 @@ housing_cleaned <- housing_cleaned %>% select(-work_last_seas,
                                               -amt_rec,
                                               -handpump)
 
-map(housing_cleaned, ~sum(is.na(.)))
+# map(housing_cleaned, ~sum(is.na(.)))
+# 
+# View(housing_cleaned)
+
+hh_data <- merge(housing_cleaned, hh_char, by = "hh_ID")
+hh_data$hh_ID[duplicated(hh_data$hh_ID)]
 ```
 
-# Recode Variables
-
 ```{r}
-str(housing_cleaned)
-
-categorical_variables <- housing_cleaned %>% select(-size_plot, 
+categorical_variables <- hh_data %>% select(-size_plot, 
                                                     -flood_depth, 
                                                     -dis_from_home, 
                                                     -cur_mv, 
@@ -355,30 +475,53 @@ categorical_variables <- housing_cleaned %>% select(-size_plot,
                                                     -house_rooms, 
                                                     -house_rooms_sleeping,
                                                     -house_age, 
-                                                    -fac_count)
-continuous_variables <- housing_cleaned %>% select(hh_ID, 
-                                                      size_plot, 
-                                                      flood_depth, 
-                                                      dis_from_home, 
-                                                      cur_mv, 
-                                                      plot_age, 
-                                                      count_latrine, 
-                                                      rent_estimate, 
-                                                      house_old,
-                                                      fuel_cost, 
-                                                      lighting_cost, 
-                                                      cell_cost, 
-                                                      house_rooms, 
-                                                      house_rooms_sleeping,
-                                                      house_age, 
-                                                      fac_count)
-
+                                                    -fac_count,
+                                                    -numChildren,
+                                                    -pctCanCarry20L,
+                                                    -pctCanWalk5Km,
+                                                    -pctCanStandOwn,
+                                                    -hh_members,
+                                                    -count_latrine)
+continuous_variables <- hh_data %>% select(hh_ID, size_plot, 
+                                                    flood_depth, 
+                                                    dis_from_home, 
+                                                    cur_mv, 
+                                                    plot_age, 
+                                                    count_latrine, 
+                                                    rent_estimate, 
+                                                    house_old,
+                                                    fuel_cost, 
+                                                    lighting_cost, 
+                                                    cell_cost, 
+                                                    house_rooms, 
+                                                    house_rooms_sleeping,
+                                                    house_age, 
+                                                    fac_count,
+                                                    numChildren,
+                                                    pctCanCarry20L,
+                                                    pctCanWalk5Km,
+                                                    pctCanStandOwn,
+                                                    hh_members,
+                                                    count_latrine)
+##################################
 # factor variables
+##################################
 
-categorical_variables <- categorical_variables %>% mutate_if(is.character,as.factor)
-categorical_variables <- categorical_variables %>% mutate_if(is.numeric,as.factor)
-categorical_variables$hh_ID <- as.integer(categorical_variables$hh_ID)
+# convert variables to factor variables except hh_ID (column 1)
 str(categorical_variables)
+categorical_variables[,-1] <- lapply(categorical_variables[,-1], function(x) as.factor(as.character(x)))
+
+# merge categorical and continous variables into one dataframe
+final_hh_data <- inner_join(categorical_variables, continuous_variables, by ="hh_ID")
+
+
+
+
+
+
+
+
+
 
 dummy_categorical_variables <- dummy.data.frame(categorical_variables)
 str(dummy_categorical_variables)
@@ -411,147 +554,8 @@ L <- loadings(pca)
 scores <- data * L
 ```
 
- $ plot_type_homestead           : num  0 1 0 0 0 0 0 0 0 0 ...
- $ plot_type_cultivable_land_pond: num  1 0 1 0 0 1 1 1 1 0 ...
- $ plot_type_other               : num  0 0 0 1 1 0 0 0 0 1 ...
-
-Who uses the plot?  
-  
-273   1 All members jointly
-191   2 Male household member
-2     3 Female household member
-4     4 Mamle outside household
-      5 Feale outside household
-9     6 Temporary user right
-      88 Not applicable/Not decided
-      
-      - all members, male, other
-
- $ who_owns1                     : int  1 1 1 1 1 0 1 0 0 1 ...
- $ who_owns1 2                   : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns1 2 3                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns1 2 4                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns1 2 5                 : int  0 0 0 0 0 0 0 0 1 0 ...
- $ who_owns1 4                   : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns1 4 5                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns1 6                   : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns2                     : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns2 3                   : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns2 3 4                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns2 4                   : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns2 4 5                 : int  0 0 0 0 0 1 0 0 0 0 ...
- $ who_owns2 4 6                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns4                     : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns6                     : int  0 0 0 0 0 0 0 1 0 0 ...
- $ who_owns88                    : int  0 0 0 0 0 0 0 0 0 0 ...
- 
- 
-Who officially owns?
-
-151   1 All members jointly
-221   2 Male household member
-11    3 Female household member
-5     4 Male outside household
-10    6 Temporary user right
-1     7 Govt/Khas land/other institutions
-5     88 Not applicable/Not decided
- 
- $ who_owns_off                  : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off1                 : int  1 0 1 1 1 0 1 0 0 1 ...
- $ who_owns_off1 2               : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off1 2 3             : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off1 2 4             : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off1 2 6             : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off1 2 88            : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off1 3 4             : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off1 6               : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off1 88              : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off2                 : int  0 1 0 0 0 0 0 0 1 0 ...
- $ who_owns_off2 3               : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off2 4               : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off2 4 5             : int  0 0 0 0 0 1 0 0 0 0 ...
- $ who_owns_off2 6               : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off3                 : int  0 0 0 0 0 0 0 1 0 0 ...
- $ who_owns_off3 4               : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off4                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off6                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off7                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_owns_off88                : int  0 0 0 0 0 0 0 0 0 0 ...
-
-In last 12 months, who decided to build any infrastructure on this plot?
-
-256   1 All members jointly
-208   2 Male household member
-1     3 Female household member
-1     4 Male outside household
-3     6 Temporary user right
-1     7 Govt/Khas land/other institutions
-13    88 Not applicable/Not decided
-
- $ who_infra1                    : int  1 1 1 1 0 0 1 0 0 1 ...
- $ who_infra1 2                  : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra1 2 3                : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra1 2 4                : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra1 2 88               : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra1 4                  : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra1 4 6                : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra2                    : int  0 0 0 0 1 0 0 0 0 0 ...
- $ who_infra2 3                  : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra2 3 4                : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra2 4                  : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra4                    : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra6                    : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra7                    : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_infra88                   : int  0 0 0 0 0 1 0 1 1 0 ...
 
 
-who_decision who takes most decisions regarding type of crop to be planted or fish to be raised?
-
-Male Decides (0,1)?????
-
-98    1 All members jointly
-135   2 Male household member
-1     4 Male outside household
-4     6 Temporary user right
-
- $ who_decision                  : int  1 0 0 0 1 1 0 1 1 1 ...
- $ who_decision1                 : int  0 1 1 1 0 0 1 0 0 0 ...
- $ who_decision1 2               : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_decision1 2 3             : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_decision2                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_decision2 3               : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_decision2 3 4             : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_decision2 3 88            : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_decision4                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_decision6                 : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd                   : int  1 0 0 0 1 1 0 1 1 1 ...
- $ who_dec_spd1                  : int  0 1 1 1 0 0 1 0 0 0 ...
- $ who_dec_spd1 2                : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd1 2 3              : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd1 2 4              : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd2                  : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd2 3                : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd4                  : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd6                  : int  0 0 0 0 0 0 0 0 0 0 ...
- 
-who decides how to spend revenues generated from crops or fish?
-
-121   1 All members jointly
-177   2 Male household member
-1     3 Female household member
-1     4 Male outside household
-1     6 Temporary user right
-1     88 Not applicable/Not decided
-
- $ who_dec_spd                   : int  1 0 0 0 1 1 0 1 1 1 ...
- $ who_dec_spd1                  : int  0 1 1 1 0 0 1 0 0 0 ...
- $ who_dec_spd1 2                : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd1 2 3              : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd1 2 4              : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd2                  : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd2 3                : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd4                  : int  0 0 0 0 0 0 0 0 0 0 ...
- $ who_dec_spd6                  : int  0 0 0 0 0 0 0 0 0 0 ...
 
 
 
