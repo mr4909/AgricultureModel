@@ -14,6 +14,8 @@ requiredPackages = c('foreign', # read dta
                      'readr',
                      'dummies',
                      'data.table',
+                     'FactoMineR',
+                     'factoextra',
                      'ggplot2', # plots
                      'tidyverse') # missing values using map
 # only downloads packages if needed
@@ -187,7 +189,6 @@ length(unique(hh_char$hh_ID)) == nrow(hh_char)
 
 # housing and sanitation characteristics
 housing_all <- `41. HousingandSanitation.dta` 
-
 
 # 113148 120225 221250 224277 more than one entry
 # probably need to figure out how to get rid of these. Max date?????????
@@ -472,6 +473,7 @@ categorical_variables <- hh_data %>% select(-size_plot,
                                                     -fuel_cost, 
                                                     -lighting_cost, 
                                                     -cell_cost, 
+                                                    -cellphone,
                                                     -house_rooms, 
                                                     -house_rooms_sleeping,
                                                     -house_age, 
@@ -489,10 +491,10 @@ continuous_variables <- hh_data %>% select(hh_ID, size_plot,
                                                     plot_age, 
                                                     count_latrine, 
                                                     rent_estimate, 
-                                                    house_old,
                                                     fuel_cost, 
                                                     lighting_cost, 
                                                     cell_cost, 
+                                                    cellphone,
                                                     house_rooms, 
                                                     house_rooms_sleeping,
                                                     house_age, 
@@ -503,343 +505,74 @@ continuous_variables <- hh_data %>% select(hh_ID, size_plot,
                                                     pctCanStandOwn,
                                                     hh_members,
                                                     count_latrine)
+
+continuous_variables1 <- apply(continuous_variables[,2:21], 2, scale)
+continuous_variables <- data.frame(continuous_variables1,continuous_variables$hh_ID)
+continuous_variables <- continuous_variables %>% mutate(hh_ID = continuous_variables.hh_ID) %>% select(-continuous_variables.hh_ID)
+
 ##################################
 # factor variables
 ##################################
 
 # convert variables to factor variables except hh_ID (column 1)
+categorical_variables[,2:44] <- lapply(categorical_variables[,2:44], function(x) as.factor(as.character(x)))
 str(categorical_variables)
-categorical_variables[,-1] <- lapply(categorical_variables[,-1], function(x) as.factor(as.character(x)))
+str(continuous_variables)
 
 # merge categorical and continous variables into one dataframe
-final_hh_data <- inner_join(categorical_variables, continuous_variables, by ="hh_ID")
-
-
-
-
-
-
-
-
-
-
-dummy_categorical_variables <- dummy.data.frame(categorical_variables)
-str(dummy_categorical_variables)
-
-dummy_continuous_variables <- dummy.data.frame(continuous_variables)
-str(dummy_continuous_variables)
-
-
-# Create dummy variables from x6
-# for(level in unique(x6)){
-#     data[paste("dummy", level, sep = "_")] <- ifelse(x6 == level, 1, 0)
-# }
-
-final_data <- merge(dummy_categorical_variables,dummy_continuous_variables, by="hh_ID")
-final_data <- final_data %>% mutate_if(is.numeric,as.factor)
-
-# Correlation matrix with appropriate coefficients
-# Pearson product-moment: 2 continuous variables
-# Point-biserial: 1 continuous and 1 binary variable
-# Phi: 2 binary variables
-# For testing purposes use hetcor function
-library(polycor)
-C <- as.matrix(hetcor(data=final_data))
-
-# Run PCA
-pca <- princomp(covmat=C)
-L <- loadings(pca)
-
-# Calculate Scores
-scores <- data * L
+final_hh_data <- merge(categorical_variables, continuous_variables, by ="hh_ID")
 ```
-
-
-
-
-
-
-Weighting?, time variable
-zscore standardize ->weighting factor -> sensitivity analysis ---- diff weights
-
-divide of collective households?
-explain differences
-collective management leads to XYZ
-
-TEST
-compare variation - crowdsource vs respondent on one question
-
-
-IDEA
-
-"many tasks included a 'crowdsourcing' component, in which the respondent would complete the task first for him- or herself, and then repeat the task for any friend, neighbor, or passerby; these participants were ideally selected on an approximately random basis ... The purpose of the crowdsourcing component in the study was to examine whether a crowdsourced sample might demonstrate a reduced selection bias, and thus better approximate a true representative sample, than our purposive sample of potential early adopters."
-
-how similar the sample is to the crowdsourced one 
-- Select characteristics (e.g., age, gender, literacy, education, etc.) and even in terms of responses to a select number of questions.  
-
-If the personal characteristics are highly similar between the two samples, it may be that as suggested, selection bias is not reduced by crowdsourcing in this way and that, therefore, this particular type of crowdsourced sample does not yield a better approximation of a true representative sample as intended. 
-- Look at the distributions of the two samples in terms of these demographics, etc. and see which one better reflects the population to see which one is more representative.  
-
-Hypothesis: Individuals selected by respondents because they are friends, neighbors, or passersby, would tend to be similar in traits to the respondents and not provide the protection against selection bias that is proposed. 
-
-
------only crowdsourced sample has years of education
-----crowdsource might not be same every time
-
-
-
-
-
-
-
-
-
 
 # PCA
 
-PCA allows you to see the overall "shape" of the data, identifying which samples are similar to one another and which are very different. This can enable us to identify groups of samples that are similar and work out which variables make one group different from another.
-
-https://uc-r.github.io/pca
+final_hh_data is standardized and scaled
 
 ```{r}
-new_data <- dummy.data.frame(final_data, names = c("housewall_material","houseroof_material","housefloor_material","house_elec","fuel_source","lighting_source","latrine_type","water_supply","drinking_source_same","water_purify","garbage"))
-str(new_data)
-new_data <- new_data %>% select(-hh_ID)
+final_hh_data_noNAs <- final_hh_data[complete.cases(final_hh_data),]
+str(final_hh_data_noNAs)
+# recode
+final_hh_data_noNAs <- dummy.data.frame(final_hh_data_noNAs)
 
-scaled_df <- apply(new_data, 2, scale)
-head(scaled_df)
-
-# remove NAs
-row.has.na <- apply(scaled_df, 1, function(x){any(is.na(x))})
-final.filtered <- scaled_df[!row.has.na,]
-
-hh.cov <- cov(final.filtered)
+# Calculate eigenvalues & eigenvectors
+hh.cov <- cov(final_hh_data_noNAs)
 hh.eigen <- eigen(hh.cov)
 str(hh.eigen)
 
-# Extract the loadings
-(phi <- hh.eigen$vectors[,1:2])
+# Compute PCA
+res.pca <- prcomp(final_hh_data_noNAs, scale. = T)
 
-phi <- -phi
-row.names(phi) <- c("house_age","cellphone","house_sharing","housewall_material1", "housewall_material2","housewall_material3","housewall_material4","housewall_material5","houseroof_material1",
-"houseroof_material2","houseroof_material3","houseroof_material4","houseroof_material5","houseroof_material6",
-"houseroof_material7","housefloor_material1","housefloor_material2","housefloor_material3","housefloor_material4",
-"housefloor_material5","housefloor_material99", "house_rooms","house_rooms_sleeping","house_elec0",
-"house_elec1","fuel_source1","fuel_source2","fuel_source3","fuel_source4",
-"fuel_source5","fuel_source6","fuel_source7","fuel_source8","fuel_source9",
-"fuel_source99","lighting_source1","lighting_source3","lighting_source4","lighting_source5",
-"lighting_source99","latrine_type1","latrine_type2","latrine_type3","latrine_type4",
-"latrine_type5","latrine_type6","latrine_type99","water_supply0","water_supply1",
-"drinking_source_same0","drinking_source_same1" ,"water_purify1","water_purify2","water_purify3",
-"water_purify4","water_purify5","water_purify99","garbage1","garbage2",
-"garbage3","garbage4","garbage5","garbage6","garbage7",
-"garbage8","hh_members","pctCanCarry20L","pctCanWalk5Km","pctCanStandOwn",
-"caloricFake")
-colnames(phi) <- c("PC1", "PC2")
-
-# Calculate Principal Components scores
-PC1 <- as.matrix(scaled_df) %*% phi[,1]
-PC2 <- as.matrix(scaled_df) %*% phi[,2]
-
-# Create data frame with Principal Components scores
-PC <- data.frame(hh_ID = row.names(final_data), PC1, PC2)
-head(PC)
-
-# Plot Principal Components for each HH
-PCAplot <- ggplot(PC, aes(PC1, PC2)) + 
-  modelr::geom_ref_line(h = 0) +
-  modelr::geom_ref_line(v = 0) +
-  geom_text(aes(label = hh_ID), size = 3) +
-  xlab("First Principal Component") + 
-  ylab("Second Principal Component") + 
-  ggtitle("First Two Principal Components of HH Data")
-PCAplot
+# Visualize eigenvalues (scree plot). Show the percentage of variances explained by each principal component.
+fviz_eig(res.pca)
 ```
+
+Gaph of individuals. Individuals with a similar profile are grouped together.
 
 ```{r}
-pca_result <- prcomp(final.filtered, scale = FALSE)
-names(pca_result)
-# means
-pca_result$center
-# standard deviations
-pca_result$scale
-# provides the principal component loadings
-pca_result$rotation 
-pca_result$rotation <- -pca_result$rotation
-pca_result$rotation
+devtools::install_github("kassambara/factoextra")
+library("factoextra")
 
-pca_result$x <- - pca_result$x
-head(pca_result$x)
-
-biplot(pca_result, scale = 0)
+fviz_pca_ind(res.pca,
+             col.ind = "cos2", # Color by the quality of representation
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             
+             jitter = list(width = 1, height =1))
 ```
+
+Graph of variables. Positive correlated variables point to the same side of the plot. Negative correlated variables point to opposite sides of the graph.
 
 ```{r}
-pca_result$sdev # standard deviation of each principal component
-VE <- pca_result$sdev^2 # variance explained by each principal component is obtained by squaring these values
-
-# proportion of variance explained by each principal component
-PVE <- VE / sum(VE)
-round(PVE, 2)
+fviz_pca_var(res.pca,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE     # Avoid text overlapping
+             )
 ```
 
- [1] 0.07 0.06 0.05 0.04 0.04 0.03 0.03 0.03 0.03 0.03 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.01
-[30] 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.00 0.00 0.00 0.00
-[59] 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
-
-ordered factor variables
-recode dummies
-
-
-
-
-
-
-
-
-
-# Agriculture 
-
-01. AgriculturalExtensionServices.dta
-02. AgriculturalProduction_level_1.dta
-03. AgriculturalProduction_plot_repeat_begin_level_2.dta
-04. AgriculturalProduction_crop_level_3.dta
-06. AgriculturalSubsidyCard.dta
+Biplot of individuals and variables
 
 ```{r}
-
-agriculture <- `01. AgriculturalExtensionServices.dta`
-
-# agriculture_NAs <- agriculture %>%
-#   group_by(hh_ID) %>% 
-#   summarize_all(.funs = list(count = ~n(), NAs = ~sum(is.na(.))))
-
-
+fviz_pca_biplot(res.pca, repel = TRUE,
+                col.var = "#2E9FDF", # Variables color
+                col.ind = "#696969"  # Individuals color
+                ,show.clust.cent = TRUE)
 ```
-
-###07. BadShocks_level_1.dta
-###08. BadShocks_event_repeat_level_2.dta
-
-###09. ClimateEvent.dta
-
-###10. Cosmetics_level_1.dta
-###11. Cosmetics_item_repeat_level_2.dta
-
-###12. Crops_level_1.dta
-###13. Crops_plot_repeat_begin_level_2.dta
-###14. Crops_crop_level_3.dta
-###15. Crops_group_crop_i_croptype_level_4.dta
-
-###16. CurrentMigrants_level_1.dta
-###17. CurrentMigrants_begin_repeat_mig_level_2.dta
-
-###18. DrinkingWater_level_1.dta
-###19. DrinkingWater_source_level_2.dta
-
-###20. Facilities_level_1.dta
-###21. Facilities_facility_repeat_level_2.dta
-
-###22. FertilizersAndPesticides_level_1.dta
-###23. FertilizersAndPesticides_plot_repeat_begin_level_2.dta
-###24. FertilizersAndPesticides_crop_level_3.dta
-###25. FertilizersAndPesticides_group_crop_i_croptype_level_4.dta
-###26. FertilizersAndPesticides_rep_fert_level_5.dta
-
-###27. FishPondInputs_level_1.dta
-###28. FishPondInputs_begin_level_2.dta
-###29. FishPondProduction_level_1.dta
-###30. FishPondProduction_pond_begin_repeat_level_2.1.dta
-###31. FishPondProduction_river_repeat_level_2.2.dta
-###32. FishPondProduction_fish_repeat_level_3.dta
-
-###33. FoodDiary_level_1.dta
-###34. FoodDiary_food_level_2.dta
-###35. Fooddiary_food_foodtype_level_3.dta
-###36. FoodStorageCapacity.dta
-
-###37. FuelLighting_level_1.dta
-###38. FuelLighting_item_repeat_level_2.dta
-
-###39. GoodShocks_level_1.dta
-###40. GoodShocks_event_repeat_level_2.dta
-
-###41. HousingandSanitation.dta
-
-###42. InformationTools_level_1.dta
-###43. InformationTools_tech_level_2.dta
-###44. InformationTools_tech_use_level_3.dta
-
-###45. Irrigation_level_1.dta
-###46. Irrigation_plot_repeat_begin_level_2.dta
-###47. Irrigation_crop_level_3.dta
-###48. Irrigation_group_crop_i_crop_repeat_type_level_4.dta
-
-###49. Livestock_level_1.dta
-###50. Livestock_animal_level_2.dta
-
-###51. Loans_level_1.dta
-###52. Loans_each_loan_level_2.dta
-
-###53. Marketing_level_1.dta
-###54. Marketing_sellrell_prod_repeat_level_2.dta
-
-###55. MobileInternet_level_1.dta
-###56. MobileInternet_app_use_level_2.dta
-
-###57. NonAgriculturalEnterprise_level_1.dta
-###58. NonAgriculturalEnterprise_buss_level_2.dta
-
-###59. OtherIncome_level_1.dta
-
-###60. OtherIncome_income_level_2.dta
-
-###61. RemittanceIn_level_1.dta
-###62. RemittanceIn_begin_repeat_mig_level_2.dta
-###63. RemittanceOut_level_1.dta
-###64. RemittanceOut_begin_repeat_mig_level_2.dta
-
-###65. SafetyProgram_level_1.dta
-###66. SafetyProgram_event_repeat_level_2.dta
-
-###67. Savings_level_1.dta
-###68. Savings_each_savings_level_2.dta
-
-###69. SubjectiveWellbeing.dta
-
-###70. TransportTravel_level_1.dta
-###71. TransportTravel_item_repeat_level_2.dta
-###72. TransportationTools_level_1.dta
-###73. TransportationTools_transport_level_2.dta
-###74. TransportationTools_transport_use_level_3.dta
-
-###75. WashingCleaning_level_1.dta
-###76. WashingCleaning_item_repeat_level_2.dta
-
-###77. WorkAnimals_level_1.dta
-###78. WorkAnimals_animals_level_2.dta
-###79. WorkAnimals_animals_use_level_3.dta
-
-###80. employment_level_1.dta
-###81. employment_work_done_level_2.dta
-
-###82. farmLabor_level_1.dta
-###83. farmLabor_begin_repeat_plot_level_2.dta
-###84. farmLabor_labor_repeat_level_3.dta
-
-###85. illness_level_1.dta
-###86. illness_was_ill_level_2.dta
-
-###87. latrineUse.dta
-###88. latrineWalk_level_1.dta
-###89. latrineWalk_begin_repeat_lat_level_2.dta
-
-###90. rentingToolsMachAn_level_1.dta
-###91. rentingToolsMachAn_plot_repeat_begin_level_2.dta
-###92. rentingToolsMachAn_crop_level_3.dta
-###93. rentingToolsMachAn_group_crop_i_crop_repeat_type_level_4.dta
-
-###94. schoolAttendance_level_1.dta
-###95. schoolAttendance_missed_school_level_2.dta
-
-###96. tubewellWalk_level_1.dta
-###97. tubewellWalk_begin_repeat_tw_level_2.dta
