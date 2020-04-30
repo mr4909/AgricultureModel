@@ -35,15 +35,6 @@ filenames <- list.files(path=mydirectory, pattern=".*dta")
 for (i in 1:length(filenames)){
   assign(filenames[i], read_dta(paste("", filenames[i], sep=''))
   )}
-
-# response rates, NAs, counts
-# df_counts_NAs <- list.files(path=mydirectory, pattern=".*dta") %>%
-#   map(~{
-#     read_dta(.x) %>%
-#       group_by(hh_ID) %>%
-#       summarize_all(.funs = list(count = ~n(), NAs = ~sum(is.na(.))))
-#   }) %>%
-#   reduce(full_join)
 ```
 
 # Questions Asked Once
@@ -57,27 +48,11 @@ for (i in 1:length(filenames)){
 # Basic Info
 ##########################
 
-# respondent_info <- Basicinformation.dta %>% select(hh_ID,
-#                                                    hh_head, # relationship to head of household
-#                                                    religion,
-#                                                    age)
-# remove outliers for age
-# respondent_info <- respondent_info %>% filter(age <= 100)
-
-#209 1 Self
- # 31 2 Spouse
- # 57 3 Child
- # 7  4 Sibling
- # 143 5 Parent
-
- # 374 1 Muslim
- # 72 2 Hindu
- # 1 4 Buddhist
-
+# find number of hh members for calculations later
 hh_count <- HouseholdComposition_level_1.dta %>% select(hh_ID, member_1_ID, hh_members) 
-# reporting differences between hh_members throughout the year, likely deaths and births?
 hh_count <- hh_count %>% distinct(hh_ID, .keep_all = TRUE)
 
+# rename variables
 hh_all <- HouseholdComposition_members_level_2.dta %>% mutate(height_meters = tot_height_inch*0.0254,
                                                               canStandOwn = hhm_health1,
                                                               canWalk5Km = hhm_health2,
@@ -90,6 +65,7 @@ hh_all <- hh_all %>% mutate(bmi = (weight_kg/(height_meters^2)))
 hh_all <- hh_all %>% filter(tot_height_inch >= 1 & tot_height_inch <= 100)
 hh_all <- hh_all %>% filter(weight_kg >= 1 & weight_kg <= 100)
 
+# create BMI categories
 hh_all <- hh_all %>% mutate(bmiCategory = ifelse(bmi >= 30, "obese", 
                                           ifelse(bmi >=25, "overweight", 
                                           ifelse(bmi >=18.5, "normal", 
@@ -101,7 +77,7 @@ hh_all <- hh_all %>% mutate(canCarry20L = ifelse(canCarry20L==77 | canCarry20L==
                             canStandOwn = ifelse(canStandOwn==77 | canStandOwn==0, 0, 1))
 
 # 0 = male, 1 = female 
-# BMI (metric) = 1.3 x weight (kg) / height (m)^2.5
+# select demographic variables
 hh_all <- hh_all %>% mutate(sex = ifelse(hhm_sex == 1,0,1)) %>% 
                        select(hh_ID,
                               member_1_ID,
@@ -119,7 +95,7 @@ hh_all <- hh_all %>% mutate(sex = ifelse(hhm_sex == 1,0,1)) %>%
                               bmi,
                               bmiCategory)
 
-# factor variables
+# change into factor variables
 hh_all$sex = factor(hh_all$sex)
 hh_all$maritalStatus = factor(hh_all$maritalStatus)
 hh_all$literacy = factor(hh_all$literacy)
@@ -127,23 +103,19 @@ hh_all$education = factor(hh_all$education)
 hh_all$occupationType = factor(hh_all$occupationType)
 hh_all$bmiCategory = factor(hh_all$bmiCategory)
 
-# logical variables
-# hh_all$attendingCollege = factor(hh_all$attendingCollege)
-# hh_all$canCarry20L = factor(hh_all$canCarry20L)
-# hh_all$canWalk5Km = factor(hh_all$canWalk5Km)
-# hh_all$canStandOwn = factor(hh_all$canStandOwn)
-
 # does hh have children?
 hh_all <- hh_all %>% mutate(isChild = ifelse(age>=18, 0, 1))
 hh_children <- hh_all %>% group_by(hh_ID) %>% tally(isChild)
 hh_children <- hh_children %>% mutate(numChildren = n) %>% select(hh_ID, numChildren)
 
-# merge
+# merge datasets
 hh_all <- merge(hh_children, hh_all, by = "hh_ID")
   
 ##########################
 # Data by resondents
 ##########################
+
+# data about respondents
 hh_respondent <- hh_all %>% filter(hhm_relation == 1)
 
 ##########################
@@ -179,10 +151,8 @@ hh_char <- merge(hh_health, hh_children, by = "hh_ID")
 hh_char <- hh_char %>% select(-member_1_ID)
 
 # TRUE, if there are no duplicates in hh_ID
-length(unique(hh_char$hh_ID)) == nrow(hh_char)
-```
+# length(unique(hh_char$hh_ID)) == nrow(hh_char)
 
-```{r}
 ####################################################
 ## Housing Characteristics
 ####################################################
@@ -200,22 +170,23 @@ housing_all <- `41. HousingandSanitation.dta`
 
 ##########
 # if there is a hh_ID duplicate, use the first entry
+# question was only supposed to be answered once but some households submitted twice
 ##########
 # TRUE, if there are no duplicates in hh_ID
-length(unique(housing_all$hh_ID)) == nrow(housing_all)
+# length(unique(housing_all$hh_ID)) == nrow(housing_all)
 housing_all$submissiondate <- as.Date(housing_all$submissiondate, "%b %d, %Y")
 housing_all <- setDT(housing_all)[housing_all[, .I[which.min(submissiondate)], by=hh_ID]$V1]
 housing_all <- housing_all %>% select(-submissiondate)
 ##########
 
 # respondent input year instead of years old
+# determine house age
 housing_fix_year <- housing_all %>% arrange(desc(house_old))
 housing_fix_year <- head(housing_fix_year, 19)
 housing_fix_year <- housing_fix_year %>% select(hh_ID, house_old, today)
 housing_fix_year$today <- as.Date(housing_fix_year$today, "%b %d, %Y")
 housing_fix_year$submissionyear <- as.numeric(format(housing_fix_year$today,'%Y'))
 housing_fix_year<- housing_fix_year %>% mutate(house_age = submissionyear-house_old) %>% select(hh_ID, house_age)
-
 housing_all_not_fix_year <- housing_all %>% filter(hh_ID != 115161 &
                                         hh_ID != 120230 &
                                         hh_ID != 105055 &
@@ -234,22 +205,24 @@ housing_all_not_fix_year <- housing_all %>% filter(hh_ID != 115161 &
                                         hh_ID != 229339 &
                                         hh_ID != 224284 &
                                         hh_ID != 232370) %>% select(hh_ID, house_old)
-
 housing_all_not_fix_year <- housing_all_not_fix_year %>% mutate(house_age = house_old) %>% select(-house_old)
 housing_all_years_fixed <- merge(housing_all_not_fix_year, housing_fix_year, by = c("hh_ID"), all=TRUE)
 housing_all_years_fixed <- housing_all_years_fixed %>% select(hh_ID, house_age = house_age.x)
 
+# select variables
 housing_all <- housing_all %>% select(-sanitation_1_ID,-expiration_date,
                                       -max_submissions,-task_value,-task_length,-recall,
                                       -recall_length,-crowdsource,-week_number,-start_time,
                                       -end_time, -today, -start_date)
 
+# merge datasets
 housing_all <- merge(housing_all_years_fixed, housing_all, by = c("hh_ID"))
 
 ####################################################
 ## Latrine and Water
 ####################################################
 
+# select variables
 latrine_all <- `87. latrineUse.dta` %>% select(hh_ID, submissiondate, use_lat, main_use, count_latrine, pct_open)
 
 ##########
@@ -260,9 +233,9 @@ latrine_all <- setDT(latrine_all)[latrine_all[, .I[which.min(submissiondate)], b
 latrine_all <- latrine_all %>% select(-submissiondate)
 ##########
 
+# merge datasets
 housing_all <- merge(latrine_all, housing_all, by = c("hh_ID"))
-
-housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+#housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 
 ####################################################
 ## Non-agricultural enterprise
@@ -281,8 +254,8 @@ nonagricultural_enterprise <- nonagricultural_enterprise %>% select(-submissiond
 
 # merge with household characteristics
 housing_all <- merge(nonagricultural_enterprise, housing_all, by = c("hh_ID"))
-housing_all$hh_ID[duplicated(housing_all$hh_ID)]
-str(housing_all)
+# housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+# str(housing_all)
 
 #################
 # ordered factor variables
@@ -319,24 +292,25 @@ facilities <- facilities %>% select(-submissiondate)
 
 # merge with household characteristics
 housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
-
-housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+#housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 
 ####################################################
-## Plots
+## Farming Plots
 ####################################################
 
+# merge plot datasets together
 plots <- Plots_plot_level_2.dta # fix year
 temp <- plots_level_1.dta %>% select(hh_ID, submissiondate, plot_1_ID, today) 
 plots <- merge(plots, temp, by=c("hh_ID","plot_1_ID"))
 
+# determine plot age
 plots$today <- format(as.Date(plots$today, format="%b %d, %Y"),"%Y")
 plots$yr_acq <- format(as.Date(plots$yr_acq, format="%b %d, %Y"),"%Y")  
 plots$today <- as.numeric(plots$today)
 plots$yr_acq <- as.numeric(plots$yr_acq)
 plots$plot_age <- plots$today - plots$yr_acq 
 
-# too many plot types (change to three types)
+# too many plot types (change to three types: homestead, cultivable, other)
 plots$plot_type_homestead <- ifelse(grepl("1",plots$plot_type), 1, 0)
 temp <- c("2","8")
 plots$plot_type_cultivable_land_pond <- ifelse(grepl(paste(temp, collapse = "|"),plots$plot_type), 1, 0)
@@ -361,7 +335,7 @@ plots$who_decision_family <- ifelse(grepl("2",plots$who_decision), 1, 0)
 temp <- c("3","4","5","6")
 plots$who_decision_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_decision), 1, 0)
 
-# who_responsible - not enough responses
+# who_responsible - not enough responses, didn't include
 
 # who_dec_spd - too many factor levels (change to three types)
 plots$who_dec_spd_male <- ifelse(grepl("1",plots$who_dec_spd), 1, 0)
@@ -385,6 +359,7 @@ plots <- setDT(plots)[plots[, .I[which.min(submissiondate)], by=hh_ID]$V1]
 plots <- plots %>% select(-submissiondate)
 ##########
 
+# select final variables
 plots <- plots %>%  select( hh_ID,
                             plot_type_homestead,
                             plot_type_cultivable_land_pond,
@@ -423,11 +398,13 @@ plots <- plots %>%  select( hh_ID,
 
 # merge with household characteristics
 housing_all <- merge(plots, housing_all, by = c("hh_ID"))
-housing_all$hh_ID[duplicated(housing_all$hh_ID)]
-```
+#housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 
+##################################################################
 ## Remove nested and NA questions
-```{r}
+##################################################################
+
+# remove variables with almost all missing values
 housing_cleaned <- housing_all %>% select(-rent_paid, 
                                           -drinking_source, 
                                           -house_supply_off, 
@@ -439,7 +416,7 @@ housing_cleaned <- housing_all %>% select(-rent_paid,
                                           #-water_purpose_other, 
                                           -color_check)
 
-# remove variables with most missing values
+# remove variables with almost all missing values
 housing_cleaned <- housing_cleaned %>% select(-work_last_seas, 
                                               #-who_responsible, 
                                               -housewall_material_other, 
@@ -452,16 +429,16 @@ housing_cleaned <- housing_cleaned %>% select(-work_last_seas,
                                               -garbage_other, 
                                               -amt_rec,
                                               -handpump)
-
+# View missing values by variable
 # map(housing_cleaned, ~sum(is.na(.)))
-# 
-# View(housing_cleaned)
 
+# merge datasets
 hh_data <- merge(housing_cleaned, hh_char, by = "hh_ID")
-hh_data$hh_ID[duplicated(hh_data$hh_ID)]
-```
+#chh_data$hh_ID[duplicated(hh_data$hh_ID)]
 
-```{r}
+#########################################################
+# Separate categorical variables and continuous variables
+#########################################################
 categorical_variables <- hh_data %>% select(-size_plot, 
                                                     -flood_depth, 
                                                     -dis_from_home, 
@@ -506,18 +483,19 @@ continuous_variables <- hh_data %>% select(hh_ID, size_plot,
                                                     hh_members,
                                                     count_latrine)
 
+# scale continuous variables
 continuous_variables1 <- apply(continuous_variables[,2:21], 2, scale)
 continuous_variables <- data.frame(continuous_variables1,continuous_variables$hh_ID)
 continuous_variables <- continuous_variables %>% mutate(hh_ID = continuous_variables.hh_ID) %>% select(-continuous_variables.hh_ID)
 
 ##################################
-# factor variables
+# factor variables that are characters
 ##################################
 
 # convert variables to factor variables except hh_ID (column 1)
 categorical_variables[,2:44] <- lapply(categorical_variables[,2:44], function(x) as.factor(as.character(x)))
-str(categorical_variables)
-str(continuous_variables)
+#str(categorical_variables)
+#str(continuous_variables)
 
 # merge categorical and continous variables into one dataframe
 final_hh_data <- merge(categorical_variables, continuous_variables, by ="hh_ID")
@@ -528,15 +506,15 @@ final_hh_data <- merge(categorical_variables, continuous_variables, by ="hh_ID")
 final_hh_data is standardized and scaled
 
 ```{r}
+# remove NAs
 final_hh_data_noNAs <- final_hh_data[complete.cases(final_hh_data),]
-str(final_hh_data_noNAs)
-# recode
+# recode dummy frame
 final_hh_data_noNAs <- dummy.data.frame(final_hh_data_noNAs)
 
 # Calculate eigenvalues & eigenvectors
 hh.cov <- cov(final_hh_data_noNAs)
 hh.eigen <- eigen(hh.cov)
-str(hh.eigen)
+# str(hh.eigen)
 
 # Compute PCA
 res.pca <- prcomp(final_hh_data_noNAs, scale. = T)
@@ -545,20 +523,7 @@ res.pca <- prcomp(final_hh_data_noNAs, scale. = T)
 fviz_eig(res.pca)
 ```
 
-Gaph of individuals. Individuals with a similar profile are grouped together.
-
-```{r}
-devtools::install_github("kassambara/factoextra")
-library("factoextra")
-
-fviz_pca_ind(res.pca,
-             col.ind = "cos2", # Color by the quality of representation
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             
-             jitter = list(width = 1, height =1))
-```
-
-Graph of variables. Positive correlated variables point to the same side of the plot. Negative correlated variables point to opposite sides of the graph.
+Graph of individuals. Individuals with a similar profile are grouped together.
 
 ```{r}
 fviz_pca_var(res.pca,
@@ -566,13 +531,175 @@ fviz_pca_var(res.pca,
              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
              repel = TRUE     # Avoid text overlapping
              )
+
+fviz_pca_ind(res.pca,
+             col.ind = "cos2", # Color by the quality of representation
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE     # Avoid text overlapping
+             )
+
+fviz_pca_ind(res.pca, pointsize = "cos2", 
+             pointshape = 21, fill = "#E7B800",
+             repel = TRUE)
+
+fviz_pca_ind(res.pca, col.ind = "cos2", pointsize = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE) 
+
+# Total contribution on PC1 and PC2
+# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
+
+# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
+
+# Contributions of variables to PC3
+fviz_contrib(res.pca, choice = "var", axes = 3, top = 10)
+
+# Contributions of variables to PC4
+fviz_contrib(res.pca, choice = "var", axes = 4, top = 10)
+
+# Contributions of variables to PC5
+fviz_contrib(res.pca, choice = "var", axes = 5, top = 10)
 ```
 
-Biplot of individuals and variables
+# Figure out dimensions of well-being using Factor Analysis
+
+http://www.di.fc.ul.pt/~jpn/r/factoranalysis/factoranalysis.html#factor-analysis-vs.pca
 
 ```{r}
-fviz_pca_biplot(res.pca, repel = TRUE,
-                col.var = "#2E9FDF", # Variables color
-                col.ind = "#696969"  # Individuals color
-                ,show.clust.cent = TRUE)
+library(psych)
+library(nFactors)
+pca_df <- final_hh_data_noNAs %>% select(-hh_ID)
+
+ev <- eigen(cor(pca_df)) # get eigenvalues
+ap <- parallel(subject=nrow(pca_df),var=ncol(pca_df), rep=100, cent=.05)
+nS <- nScree(x=ev$values, aparallel=ap$eigen$qevpea)
+plotnScree(nS)
+
+factor26 <- fa(pca_df,nfactors = 26,rotate = "oblimin",fm="minres")
+print(factor26)
 ```
+
+The blue line shows eigenvalues of actual data and the two red lines (placed on top of each other) show simulated and resampled data. Here we look at the large drops in the actual data and spot the point where it levels off to the right. Also, we locate the point of inflection – the point where the gap between simulated data and actual data tends to be minimum.
+
+Looking at this plot and parallel analysis, anywhere between 20 to 40 factors would be a good choice.
+
+A general rule of thumb is that if the absolute value of the standardized loading is greater than 0.3, the variable is relevant for the particular factor
+
+```{r}
+#  consider the loadings more than 0.3 and not loading on more than one factor
+# negative values are acceptable
+print(factor26$loadings,cutoff = 0.3)
+```
+
+```{r}
+fa.diagram(factor26)
+summary(factor26)
+```
+
+The root mean square of residuals (RMSR) is 0.04. This is acceptable as this value should be closer to 0. 
+
+RMSEA (root mean square error of approximation) index. Its value, 0 shows the good model fit as it’s below 0.05. 
+Tucker-Lewis Index (TLI) is 1.207 – an acceptable value considering it’s over 0.9.
+
+###Significant Loadings:
+
+*Soil Type*
+soil_type3  0.326     loam                              
+soil_type4  -0.321    clay loam                        
+soil_type5  -0.317    sandy loam
+
+*Current Operational Status of Plot*
+cur_opr_status5 0.325
+cur_opr_status6 0.313
+cur_opr_status9 0.430      
+
+*How was plot acquired?*
+how_acq1  -0.313      purchased/bought
+how_acq2  0.302       inherited (wife's family)                                                 
+how_acq3  -0.332      inherited (husband's family)
+how_acq5  -0.338      User right *=(husband;s family)
+
+*In last 12 months, who decided to build any infrastructure on this plot?*
+who_infra_family0 -0.707
+who_infra_family1 0.707  
+
+*What kind of toilet facility do members of your household use most of the time?*
+main_use1 0.304
+main_use12  -0.433
+
+*How many households live in this house?*
+house_sharing0  -0.470                                                                                                  
+house_sharing1  -0.319 
+house_sharing3  0.340   
+
+*How many rooms does your household occupy?*
+house_rooms -0.372
+
+*How many rooms are used for sleeping?*
+house_rooms_sleeping  -0.469    
+
+*What is your main source of cooking fuel?*
+fuel_source5  -0.468  
+
+*House wall and roof material*
+housewall_material5 0.321
+houseroof_material6 -0.433
+
+*What is your main source of lighting fuel?*
+lighting_source3  -0.535                                                                                                            
+
+*What type of latrine do you use?*
+latrine_type3 0.302      Pucca (unsealed)                                    
+latrine_type5 -0.327     Sanitary w flash (water sealed)
+
+*About how many latrines would you say members of your household have access to?*
+count_latrine 0.336                                                                                                                             
+*Do you use any drinking water purifying process?*
+water_purify4 -0.363     Boiled and Filtered
+
+*How do you dispose garbage?*
+garbage5  0.354          Burnt/buried                                                                                               
+
+*Number of facilities frequently visited*
+fac_count 0.368                                                                                                                     
+
+*Number of children*
+numChildren 0.319   
+
+*Percent of household who can stand on their own*
+pctCanStandOwn  0.337   
+
+# Subjective Wellbeing
+
+Crowdsourced subjective wellbeing.
+
+```{r}
+library(faraway)
+wellbeing <- `69. SubjectiveWellbeing.dta` %>% filter(crowdsource == 1)
+map(wellbeing, ~sum(is.na(.)))
+wellbeing <- wellbeing %>% select(hh_ID, submissiondate,week_number,personality1)
+
+##########
+# if there is a hh_ID duplicate, use the first entry
+##########
+wellbeing$submissiondate <- as.Date(wellbeing$submissiondate, "%b %d, %Y")
+wellbeing <- setDT(wellbeing)[wellbeing[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+wellbeing <- wellbeing %>% select(-submissiondate)
+##########
+
+wellbeing_df <- merge(wellbeing, final_hh_data_noNAs, by = "hh_ID")
+
+```
+
+
+# Lasso and Ridge Regression for Variable Selection
+
+```{r}
+library(faraway)
+split <- sample.split(rownames(final_hh_data_noNAs),SplitRatio = 0.80)
+train <- df[split == T , ];str(train)
+test <- df[split == F , ] ; str(test)
+```
+
