@@ -1,0 +1,326 @@
+food_ID,food_name,food_name_type
+1,Parboiled rice (coarse),cereals
+2,Non-parboiled rice (coarse),cereals
+3,Fine rice,cereals
+4,Rice flour,cereals
+5,Suji (cream of wheat/barley),cereals
+6,Wheat,cereals
+7,Atta,cereals
+8,Maida (wheat flour w/o bran),cereals
+9,Semai/noodles,cereals
+10,Chaatu,cereals
+11,Chira (flattened rice),cereals
+12,Muri/Khoi (puffed rice),cereals
+13,Barley,cereals
+14,Sagu,cereals
+15,Corn,cereals
+16,Cerelac,cereals
+17,Other cereals,cereals
+18,Dried Lentil,pulses
+19,Dried Chick pea,pulses
+20,Anchor daal,pulses
+21,Black gram,pulses
+22,Khesari,pulses
+23,Mung,pulses
+24,Dried Pea,pulses
+25,Shem bitchi,pulses
+26,Groundnut,pulses
+27,Cashew Nut,pulses
+28,Almond/Badam,pulses
+29,Brazilnut,pulses
+30,Chestnut,pulses
+31,Hazelnut,pulses
+32,hickory,pulses
+33,Pecan,pulses
+34,Pine Nut,pulses
+35,Pistachio,pulses
+36,Walnut,pulses
+37,Cantaloupe Seed,pulses
+38,Cottonseed,pulses
+39,Flaxseed,pulses
+40,Hempseed,pulses
+41,Pumpkin Seed,pulses
+42,Sesame Seed,pulses
+43,Sunflower Seed,pulses
+44,Any nut butters,pulses
+45,Other pulses/nuts/seeds,pulses
+46,Soybean,oil
+47,Mustard,oil
+48,Dalda/banspati,oil
+49,Ghee,oil
+50,Red Palm Oil,oil
+51,Yellow Palm Oil,oil
+52,Sesame oil,oil
+53,Other oil,oil
+54,Patal,vegetables
+55,Bitter gourd,vegetables
+56,Okra,vegetables
+57,Eggplant,vegetables
+58,Tomato,vegetables
+59,Pumpkin,vegetables
+60,Sweet gourd,vegetables
+61,Ash gourd,vegetables
+62,Long bean,vegetables
+63,Water gourd,vegetables
+64,Sheem,vegetables
+65,Carrot,vegetables
+66,Radish,vegetables
+67,Cauliflower,vegetables
+68,Green banana,vegetables
+69,Green Papaya,vegetables
+70,Green chili,vegetables
+71,Cucumber,vegetables
+72,Kachu (arum),vegetables
+73,Danta (amaranth),vegetables
+74,Potato,vegetables
+75,Sweet potato,vegetables
+76,Green mango,vegetables
+77,Onion,vegetables
+78,Garlic,vegetables
+79,Dhundal,vegetables
+80,Shapla,vegetables
+81,Kachur lati,vegetables
+82,Jhinga (ribbed gourd),vegetables
+83,Green pea,vegetables
+84,Fig,vegetables
+85,Drum stick,vegetables
+86,Snake gourd,vegetables
+87,Green jackfruit,vegetables
+88,Kolar mocha,vegetables
+89,Mete alu,vegetables
+90,Beher gura,vegetables
+91,Soybean bori,vegetables
+92,Jack fruit seed,vegetables
+93,Kakrol,vegetables
+94,Shalgom,vegetables
+95,Other vegetable,vegetables
+96,Pui (Indian spinach),leafyveg
+97,Lal Shak (red amaranth),leafyveg
+98,Bathua,leafyveg
+99,Bokful,leafyveg
+100,Cabbage,leafyveg
+101,Danta Shak,leafyveg
+102,Helencha,leafyveg
+103,Kalmi Shak,leafyveg
+104,Kachu Shak,leafyveg
+105,Kalo kachu Shak,leafyveg
+106,Katanate,leafyveg
+107,Lau Shak,leafyveg
+108,Pat Shak,leafyveg
+109,Dheki Shak,leafyveg
+110,Dhania Shak,leafyveg
+111,Palang Shak (spinach),leafyveg
+112,Onion/garlic stalk,leafyveg
+113,Pea leaves,leafyveg
+114,Drumstick leaves,leafyveg
+115,Mustard leaves,leafyveg
+116,Radish leaves,leafyveg
+117,Mixed leafy vegetables,leafyveg
+118,Dudhali Pata,leafyveg
+119,Black gram leaves,leafyveg
+120,Shechi Shak,leafyveg
+121,Swett gourd leaves,leafyveg
+122,Khesari Shak,leafyveg
+123,Geema Shak,leafyveg
+124,Neem Shak,leafyveg
+125,Darkuni Shak,leafyveg
+126,Other leafy vegetables,leafyveg
+127,Beef/buffalo,meategg
+128,Mutton,meategg
+129,Chicken,meategg
+130,Duck,meategg
+131,Pigeon,meategg
+132,Bids/bok/gughu,meategg
+133,Liver,meategg
+134,Stomach of beef/goat,meategg
+135,Dried meat,meategg
+136,Egg,meategg
+137,Fish egg,meategg
+138,Other meat or egg,meategg
+139,Milk,dairy
+140,Milk in Tea,dairy
+141,Powdered Milk,dairy
+142,Condensed Milk,dairy
+143,Butter,dairy
+144,Yogurt,dairy
+145,Cottage cheese or Paneer,dairy
+146,Buttermilk,dairy
+147,Solid Cheese Curds,dairy
+148,Ice Cream,dairy
+149,Other dairy,dairy
+150,Rui,fishlarge
+151,Katla,fishlarge
+152,Mrigel,fishlarge
+153,Kalibaus,fishlarge
+154,Surma,fishlarge
+155,Chital,fishlarge
+156,Boal,fishlarge
+157,Aair,fishlarge
+158,Pangash,fishlarge
+159,Ritha,fishlarge
+160,Hilsa,fishlarge
+161,Jatka,fishlarge
+162,Grass Carp,fishlarge
+163,Mirror Carp,fishlarge
+164,Silver Carp,fishlarge
+165,Telapia,fishlarge
+166,Swarputi,fishlarge
+167,Chital,fishlarge
+168,Taki,fishlarge
+169,Mague,fishlarge
+170,Singi,fishlarge
+171,Baim,fishlarge
+172,Koi,fishlarge
+173,Meni,fishlarge
+174,Shapla/padda/rupsha fish,fishlarge
+175,Bagda Chingree,fishlarge
+176,Golda Chingree,fishlarge
+177,Tortoise meat,fishlarge
+178,Poona fish,fishlarge
+179,Dried fish,fishlarge
+180,Other big fish,fishlarge
+181,Gura mach,fishsmall
+182,Panch mishali,fishsmall
+183,Puti,fishsmall
+184,Tengra,fishsmall
+185,Pabda,fishsmall
+186,Moa/mola,fishsmall
+187,Dhela,fishsmall
+188,Batashi,fishsmall
+189,Kachki,fishsmall
+190,Chanda,fishsmall
+191,Khalisa,fishsmall
+192,Chela,fishsmall
+193,Chapila,fishsmall
+194,Kajari,fishsmall
+195,Tatkeni,fishsmall
+196,Bata,fishsmall
+197,Ghutum,fishsmall
+198,Bele,fishsmall
+199,Chewa,fishsmall
+200,Poa,fishsmall
+201,Foli,fishsmall
+202,Bacha,fishsmall
+203,Baicha,fishsmall
+204,Kaikla,fishsmall
+205,Darkini,fishsmall
+206,Palshe,fishsmall
+207,Harkun,fishsmall
+208,Karfu fish,fishsmall
+209,Kakra,fishsmall
+210,Small prawn,fishsmall
+211,Dried small shrimp/prawn,fishsmall
+212,Dried small fish,fishsmall
+213,Fermented fish,fishsmall
+214,Other small fish,fishsmall
+215,Dried chili,spices
+216,Turmeric (not dried),spices
+217,Turmeric (dried),spices
+218,Jira,spices
+219,Elachi,spices
+220,Cinnamon,spices
+221,Iodized salt,spices
+222,Non-iodized salt,spices
+223,Panchforan,spices
+224,Coriander,spices
+225,Fresh Ginger,spices
+226,Dried Ginger,spices
+227,Garam Masala,spices
+228,Black cumin,spices
+229,Mustard,spices
+230,Til (sesame),spices
+231,Mouri,spices
+232,Babuni/randhuni,spices
+233,Tishi,spices
+234,Tejpata,spices
+235,Baking powder,spices
+236,Other,spices
+237,"Sugar, including in Tea",spices
+238,Gur,spices
+239,Misri/tal mistri,spices
+240,Tea leaves,spices
+241,Badam (ground nut),spices
+242,Honey,spices
+243,Chutney,spices
+244,Pickles,spices
+245,Sugarcane,spices
+246,Jaggery -solid,spices
+247,Other spices or sweetener,spices
+248,Tea –prepared,drinks
+249,Coke/ Seven-up etc/Pepci/RC/Urocola etc,drinks
+250,Packaged Juice,drinks
+251,Horlicks/Bournvita/Tang,drinks
+252,Sugarcane/palm/date juice,drinks
+253,Fresh 100% fruit juice,drinks
+254,Other drink,drinks
+255,Rice/Jao,otherfoodohome
+256,Panta Bhaat,otherfoodohome
+257,Khichuri,otherfoodohome
+258,Polao/Biryani/Tehari,otherfoodohome
+259,Ruti/Parota,otherfoodohome
+260,Bonroti/paoroti,otherfoodohome
+261,Burger,otherfoodohome
+262,Paes/firni/cooked firni,otherfoodohome
+263,Pitha,otherfoodohome
+264,Halua,otherfoodohome
+265,Bharta,otherfoodohome
+266,Bhaji,otherfoodohome
+267,Jhol curry,otherfoodohome
+268,Bhuna curry,otherfoodohome
+269,Daal,otherfoodohome
+270,Salad,otherfoodohome
+271,Sweets,otherfoodohome
+272,Curd,otherfoodohome
+273,Alur chap,otherfoodohome
+274,Singara,otherfoodohome
+275,Puri,otherfoodohome
+276,Piaju,otherfoodohome
+277,Chhola/ghugni/boot,otherfoodohome
+278,Achar/Chatni,otherfoodohome
+279,Chotpoti,otherfoodohome
+280,Chanachur,otherfoodohome
+281,Biscuit,otherfoodohome
+282,Cake,otherfoodohome
+283,Patties,otherfoodohome
+284,Chips,otherfoodohome
+285,Chocolate,otherfoodohome
+286,Chewing gum,otherfoodohome
+287,Gaja,otherfoodohome
+288,Murali,otherfoodohome
+289,Nimki,otherfoodohome
+290,Any fried food,otherfoodohome
+291,Any boiled food,otherfoodohome
+292,Tobacco,otherfoodohome
+293,Ice cream,otherfoodohome
+294,Other food outside of home,otherfoodohome
+295,Mango,fruits
+296,Banana,fruits
+297,Papaya,fruits
+298,Orange,fruits
+299,Apple,fruits
+300,Coconut,fruits
+301,Jack Fruit,fruits
+302,Litchis,fruits
+303,Black berry,fruits
+304,Bel,fruits
+305,Pomelo,fruits
+306,Grapes,fruits
+307,Amra,fruits
+308,Karambola,fruits
+309,Guava,fruits
+310,Jujube/dried jujube,fruits
+311,Olive,fruits
+312,Tamarind,fruits
+313,Dalim,fruits
+314,Lemon,fruits
+315,Dates,fruits
+316,Green Coconut,fruits
+317,Ata (bullock's heart),fruits
+318,Chalta,fruits
+319,Tarmuj (Water melon),fruits
+320,Bangi (Musk melon),fruits
+321,Pine apple,fruits
+322,Sobeda,fruits
+323,Jaamrul,fruits
+324,Other fruit,fruits
+Other fruit,fruits,
