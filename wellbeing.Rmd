@@ -12,6 +12,7 @@ requiredPackages = c('foreign', # read dta
                      'haven',
                      'gridExtra',
                      'readr',
+                     'readxl',
                      'dummies',
                      'data.table',
                      'FactoMineR',
@@ -581,7 +582,7 @@ str(housing_all)
 # merge datasets
 hh_data <- merge(housing_all, hh_char, by = "hh_ID")
 str(hh_data)
-#chh_data$hh_ID[duplicated(hh_data$hh_ID)]
+#hh_data$hh_ID[duplicated(hh_data$hh_ID)]
 
 #########################################################
 # Separate categorical variables and continuous variables
@@ -656,211 +657,217 @@ final_hh_data_noNAs <- dummy.data.frame(final_hh_data_noNAs)
 
 # PCA
 
-final_hh_data_noNAs is standardized and scaled
-
-```{r}
-# Calculate eigenvalues & eigenvectors
-hh.cov <- cov(final_hh_data_noNAs)
-hh.eigen <- eigen(hh.cov)
-# str(hh.eigen)
-
-# Compute PCA
-res.pca <- prcomp(final_hh_data_noNAs, scale. = T)
-
-# Visualize eigenvalues (scree plot). Show the percentage of variances explained by each principal component.
-fviz_eig(res.pca)
-
-fviz_pca_var(res.pca,
-             col.var = "contrib", # Color by contributions to the PC
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE     # Avoid text overlapping
-             )
-
-fviz_pca_ind(res.pca,
-             col.ind = "cos2", # Color by the quality of representation
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE     # Avoid text overlapping
-             )
-
-fviz_pca_ind(res.pca, pointsize = "cos2", 
-             pointshape = 21, fill = "#E7B800",
-             repel = TRUE)
-
-fviz_pca_ind(res.pca, col.ind = "cos2", pointsize = "cos2",
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE) 
-
-# Total contribution on PC1 and PC2
-# Contributions of variables to PC1
-fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
-
-# Contributions of variables to PC2
-fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
-
-# Contributions of variables to PC3
-fviz_contrib(res.pca, choice = "var", axes = 3, top = 10)
-
-# Contributions of variables to PC4
-fviz_contrib(res.pca, choice = "var", axes = 4, top = 10)
-
-# Contributions of variables to PC5
-fviz_contrib(res.pca, choice = "var", axes = 5, top = 10)
-```
-
 # Figure out dimensions of well-being using Factor Analysis
 
 http://www.di.fc.ul.pt/~jpn/r/factoranalysis/factoranalysis.html#factor-analysis-vs.pca
 
-
+# Food Diary
 ```{r}
-library(psych)
-library(nFactors)
-pca_df <- final_hh_data_noNAs %>% select(-hh_ID)
 
-ev <- eigen(cor(pca_df)) # get eigenvalues
-ap <- parallel(subject=nrow(pca_df),var=ncol(pca_df), rep=100, cent=.05)
-nS <- nScree(x=ev$values, aparallel=ap$eigen$qevpea)
-plotnScree(nS)
+# Which of the following groups of foods were consumed by members of your household in the last ${recall_length} hours?
+# Scroll carefully down the list and select all that apply.
 
-factor28 <- fa(pca_df,nfactors = 28,rotate = "oblimin",fm="minres")
-print(factor28)
+# select noncrowdsourced data
+fooddiary_1 <- `33.FoodDiary_level_1.dta` %>% filter(crowdsource==0)
+
+# select variables
+fooddiary_1 <- fooddiary_1 %>% select(hh_ID, 
+                                      food_1_ID,
+                                      submissiondate, 
+                                      recall, # month 516 season 272 week 4944
+                                      week_number, #3:50 weeks
+                                      # gender, 
+                                      # age, 
+                                      # education, 
+                                      # highest_class, 
+                                      # relationship, 
+                                      food_list, # groups of foods consumed
+                                      food_count) # number of foods selected
+fooddiary_2 <- `34. FoodDiary_food_level_2.dta` %>% select(hh_ID, 
+                                      food_1_ID,
+                                      food_2_ID,
+                                      food_grp_namec, 
+                                      food_type) #will require grepl
+fooddiary_3 <- `35. Fooddiary_food_foodtype_level_3.dta` %>% select(hh_ID, 
+                                      food_2_ID,
+                                      food_3_ID,
+                                      food_ID = food_type_name, 
+                                      food_type_quant,
+                                      food_type_unit,
+                                      quant_pur, #How much consumed was purchased?
+                                      quant_own, #How much consumed was own production?
+                                      quant_other) #How much consumed was from other sources?
+
+# duplicate rows based on food_count - not necessary
+# fooddiary_1 <- fooddiary_1[rep(seq(nrow(fooddiary_1)), fooddiary_1$food_count),]
+
+# merge levels 1 and 2
+fooddiary_1_2 <- merge(fooddiary_1,fooddiary_2, by=c("hh_ID","food_1_ID"))
+
+# merge with level 3
+fooddiary_all <- merge(fooddiary_1_2,fooddiary_3, by=c("hh_ID","food_2_ID"))
+
+# remove unwanted variables
+fooddiary_all <- fooddiary_all %>% select(-food_1_ID,-food_2_ID,-food_3_ID,-food_type)
+
+# 118 food_type_name are missing
+# map(fooddiary_all, ~sum(is.na(.)))
+# remove missing values for now.
+fooddiary_all <- fooddiary_all[complete.cases(fooddiary_all),]
 ```
 
-The blue line shows eigenvalues of actual data and the two red lines (placed on top of each other) show simulated and resampled data. Here we look at the large drops in the actual data and spot the point where it levels off to the right. Also, we locate the point of inflection – the point where the gap between simulated data and actual data tends to be minimum.
-
-Looking at this plot and parallel analysis, anywhere between 20 to 40 factors would be a good choice.
-
-A general rule of thumb is that if the absolute value of the standardized loading is greater than 0.3, the variable is relevant for the particular factor
-
-```{r}
-#  consider the loadings more than 0.3 and not loading on more than one factor
-# negative values are acceptable
-print(factor28$loadings,cutoff = 0.3)
-```
+*Food Type Unit*
+9,262 1 Kg
+8,285 2 Grams
+205 3 Liter
+308 4 Milliliter
+591 5 Tablespoon
+391 6 Teaspoon
+208 7 Drops
+3,088 8 Count
 
 ```{r}
-fa.diagram(factor28)
-summary(factor28)
+# food names
+food_list <- read_csv("Datasets/food_list.csv")
+food_calories <- read_csv("Datasets/food_cal.csv")
+food_calories <- food_calories %>% mutate(food_name = food_type)  %>% 
+                                   select(-food_type)
+food_info <- merge(food_calories, food_list, by="food_name")
+
+##############################
+# some calories are zero, fix?????????
+##############################
+# Carbohydrates provide 4 calories per gram, protein provides 4 calories per gram, and fat provides 9 calories per gram
+# food_info <- food_info %>% filter(calorie_grams != 0)
+
+# merge with food list names 
+fooddiary_cleaned <- merge(food_info, fooddiary_all, by="food_ID")
+fooddiary_cleaned <- fooddiary_cleaned %>% select(hh_ID,
+                                                  submissiondate,
+                                                  recall,
+                                                  week_number,
+                                                  food_ID,
+                                                  food_count,
+                                                  food_name,
+                                                  food_name_type,
+                                                  food_type_quant,
+                                                  food_type_unit,
+                                                  quant_pur,
+                                                  quant_own,
+                                                  quant_other)
+
+# percent purchased, grown, other
+fooddiary_cleaned <- fooddiary_cleaned %>% mutate(quant_pur_pct = quant_pur/food_type_quant,
+                                                  quant_own_pct = quant_own/food_type_quant,
+                                                  quant_other_pct = quant_other/food_type_quant)
+
+# merge with food calories/info
+fooddiary_cleaned <- merge(fooddiary_cleaned, food_info, by=c("food_ID","food_name_type","food_name"))
+
+# reorder variables
+fooddiary_cleaned <- fooddiary_cleaned %>% select(hh_ID,
+                                                  submissiondate,
+                                                  recall,
+                                                  week_number,
+                                                  food_ID,
+                                                  food_count,
+                                                  food_name,
+                                                  food_name_type,
+                                                  food_type_quant,
+                                                  food_type_unit,
+                                                  calories_grams,
+                                                  quant_pur,
+                                                  quant_own,
+                                                  quant_other,
+                                                  quant_pur_pct,
+                                                  quant_own_pct,
+                                                  quant_other_pct)
+
+# fix dates and times
+fooddiary_cleaned <- fooddiary_cleaned %>%
+  mutate(datetime = as.POSIXct(strptime(submissiondate, format = "%b %d, %Y %I:%M:%S %p")),
+         datetime_military = strftime(datetime, format = "%Y-%m-%d %H:%M"))
+
+# extract month
+fooddiary_cleaned$submission_month <- month(fooddiary_cleaned$datetime)
+# extract weekday
+fooddiary_cleaned$submission_weekday <- weekdays(fooddiary_cleaned$datetime)
+# create breaks
+
+# time of day
+breaks <- hour(hm("00:00", "6:00", "12:00", "18:00", "23:59"))
+# labels for the breaks
+labels <- c("Night", "Morning", "Afternoon", "Evening")
+fooddiary_cleaned$time_of_day <- cut(x=hour(fooddiary_cleaned$datetime), 
+                                     breaks = breaks, 
+                                     labels = labels, include.lowest=TRUE)
 ```
 
-The root mean square of residuals (RMSR) is 0.04. This is acceptable as this value should be closer to 0. 
-
-RMSEA (root mean square error of approximation) index. Its value, 0 shows the good model fit as it’s below 0.05. 
-Tucker-Lewis Index (TLI) is 1.207 – an acceptable value considering it’s over 0.9.
-
-###Significant Loadings:
-
-*Soil Type*
-soil_type3  0.326     loam                              
-soil_type4  -0.321    clay loam                        
-soil_type5  -0.317    sandy loam
-
-*Current Operational Status of Plot*
-cur_opr_status5 0.325
-cur_opr_status6 0.313
-cur_opr_status9 0.430      
-
-*How was plot acquired?*
-how_acq1  -0.313      purchased/bought
-how_acq2  0.302       inherited (wife's family)                                                 
-how_acq3  -0.332      inherited (husband's family)
-how_acq5  -0.338      User right *=(husband;s family)
-
-*In last 12 months, who decided to build any infrastructure on this plot?*
-who_infra_family0 -0.707
-who_infra_family1 0.707  
-
-*What kind of toilet facility do members of your household use most of the time?*
-main_use1 0.304
-main_use12  -0.433
-
-*How many households live in this house?*
-house_sharing0  -0.470                                                                                                  
-house_sharing1  -0.319 
-house_sharing3  0.340   
-
-*How many rooms does your household occupy?*
-house_rooms -0.372
-
-*How many rooms are used for sleeping?*
-house_rooms_sleeping  -0.469    
-
-*What is your main source of cooking fuel?*
-fuel_source5  -0.468  
-
-*House wall and roof material*
-housewall_material5 0.321
-houseroof_material6 -0.433
-
-*What is your main source of lighting fuel?*
-lighting_source3  -0.535                                                                                                            
-
-*What type of latrine do you use?*
-latrine_type3 0.302      Pucca (unsealed)                                    
-latrine_type5 -0.327     Sanitary w flash (water sealed)
-
-*About how many latrines would you say members of your household have access to?*
-count_latrine 0.336                                                                                                                             
-*Do you use any drinking water purifying process?*
-water_purify4 -0.363     Boiled and Filtered
-
-*How do you dispose garbage?*
-garbage5  0.354          Burnt/buried                                                                                               
-
-*Number of facilities frequently visited*
-fac_count 0.368                                                                                                                     
-
-*Number of children*
-numChildren 0.319   
-
-*Percent of household who can stand on their own*
-pctCanStandOwn  0.337   
-
-Run PCA with this set of variables to see what the compenents look like. Types of households.
-Clustering k-means 
-Fuzzy
-Wellbeing, Food - same recall
-
-# Subjective Wellbeing
-
-Crowdsourced subjective wellbeing.
-
+*Calculate average caloric intake per person in each household*
 ```{r}
-library(faraway)
-wellbeing <- `69. SubjectiveWellbeing.dta` %>% filter(crowdsource == 1)
-map(wellbeing, ~sum(is.na(.)))
-wellbeing <- wellbeing %>% select(hh_ID, submissiondate,week_number,personality1)
+# 1	Kg          *1000
+# 2	Grams
+# 3	Liter       *1000
+# 4	Milliliter  /1000
+# 5	Tablespoon  *15
+# 6	Teaspoon    *4,2
+# 7	Drops       *0.05
+# 8	Count
 
-##########
-# if there is a hh_ID duplicate, use the first entry
-##########
-wellbeing$submissiondate <- as.Date(wellbeing$submissiondate, "%b %d, %Y")
-wellbeing <- setDT(wellbeing)[wellbeing[, .I[which.min(submissiondate)], by=hh_ID]$V1]
-wellbeing <- wellbeing %>% select(-submissiondate)
-##########
-
-wellbeing_df <- merge(wellbeing, final_hh_data_noNAs, by = "hh_ID")
-
+if (fooddiary_cleaned$food_type_quant==1) {
+  
+    fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams* 
+  
+  
+  
+  
+  
+  
+  
+  fooddiary_cleaned$food_type_quant*1000
+} else if (fooddiary_cleaned$food_type_quant==2) {
+fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
+} else if (fooddiary_cleaned$food_type_quant==3) {
+fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
+} else if (fooddiary_cleaned$food_type_quant==4) {
+fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
+} else if (fooddiary_cleaned$food_type_quant==5) {
+fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
+} else if (fooddiary_cleaned$food_type_quant==6) {
+fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
+} else if (fooddiary_cleaned$food_type_quant==7) {
+fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
+} else {
+fooddiary_cleaned$calories_total = "not sure (count)"
+}
 ```
 
-# Lasso and Ridge Regression for Variable Selection
-
+## Plots
 ```{r}
-library(faraway)
-split <- sample.split(rownames(final_hh_data_noNAs),SplitRatio = 0.80)
-train <- df[split == T , ];str(train)
-test <- df[split == F , ] ; str(test)
+p1 <- ggplot(fooddiary_cleaned, aes(x=submission_month, y=calories_grams)) +
+  geom_line(color="#69b3a2", size=2) +
+  ggtitle("Calories reported by month")
+
+p2 <- ggplot(fooddiary_cleaned, aes(x=week_number, y=calories_grams)) +
+  geom_line(color="#69b3a2", size=2) +
+  ggtitle("Calories reported by week")
+
+p3 <- ggplot(fooddiary_cleaned, aes(x=time_of_day, y=calories_grams)) +
+  geom_line(color="#69b3a2", size=2) +
+  ggtitle("Calories reported by time of day")
+
+p4 <- ggplot(fooddiary_cleaned, aes(x=submission_weekday, y=calories_grams)) +
+  geom_line(color="#69b3a2", size=2) +
+  ggtitle("Calories reported by day of the week")
+
+p1
+p2
+p3
+p4
 ```
 
 
-
-
-
-
-
-
-
-
+# Notes
 Responses in food diary:
 Look over time and identify periods were there were responses
 Seasonal access to calories
