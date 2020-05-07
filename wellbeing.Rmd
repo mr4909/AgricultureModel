@@ -8,15 +8,17 @@ output: pdf_document
 ```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
 # load necessary packages
 requiredPackages = c('foreign', # read dta
-                     'dplyr',
+                     'dplyr', # data manipulation
                      'haven',
-                     'gridExtra',
-                     'readr',
-                     'readxl',
-                     'dummies',
-                     'data.table',
-                     'FactoMineR',
-                     'factoextra',
+                     'gridExtra', # data manipulation
+                     'readr', # read files
+                     'readxl',# read files
+                     'dummies', # PCA
+                     'lubridate', # data manipulation
+                     'data.table', # data manipulation
+                     'FactoMineR', # PCA
+                     'factoextra', # PCA
+                     'lattice', # plots
                      'ggplot2', # plots
                      'tidyverse') # missing values using map
 # only downloads packages if needed
@@ -804,59 +806,210 @@ fooddiary_cleaned$time_of_day <- cut(x=hour(fooddiary_cleaned$datetime),
 ```
 
 *Calculate average caloric intake per person in each household*
-```{r}
+```{r fig1, fig.height = 4, fig.width = 4}
 # 1	Kg          *1000
 # 2	Grams
 # 3	Liter       *1000
 # 4	Milliliter  /1000
 # 5	Tablespoon  *15
-# 6	Teaspoon    *4,2
+# 6	Teaspoon    *4.2
 # 7	Drops       *0.05
 # 8	Count
 
-if (fooddiary_cleaned$food_type_quant==1) {
-  
-    fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams* 
-  
-  
-  
-  
-  
-  
-  
-  fooddiary_cleaned$food_type_quant*1000
-} else if (fooddiary_cleaned$food_type_quant==2) {
-fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
-} else if (fooddiary_cleaned$food_type_quant==3) {
-fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
-} else if (fooddiary_cleaned$food_type_quant==4) {
-fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
-} else if (fooddiary_cleaned$food_type_quant==5) {
-fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
-} else if (fooddiary_cleaned$food_type_quant==6) {
-fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
-} else if (fooddiary_cleaned$food_type_quant==7) {
-fooddiary_cleaned$calories_total = fooddiary_cleaned$calories_grams*1000
-} else {
-fooddiary_cleaned$calories_total = "not sure (count)"
-}
+# unit conversions
+fooddiary_cleaned <- fooddiary_cleaned %>% 
+  mutate(calories_total_grams = case_when((food_type_unit==1) ~ calories_grams*(food_type_quant*1000),
+                                          (food_type_unit==2) ~ calories_grams*food_type_quant,
+                                          (food_type_unit==3) ~ calories_grams*(food_type_quant*1000),
+                                          (food_type_unit==4) ~ calories_grams*(food_type_quant/1000),
+                                          (food_type_unit==5) ~ calories_grams*food_type_quant,
+                                          (food_type_unit==6) ~ calories_grams*(food_type_quant*4.2),
+                                          (food_type_unit==7) ~ calories_grams*(food_type_quant*0.05)))
+
+#####################################
+# fix food units claimed as "counts"
+#####################################
+fooddiary_cleaned_count <- fooddiary_cleaned %>% filter(food_type_unit == 8) %>% arrange(desc(food_name_type))
+
+# grains (changed to kg)
+fooddiary_cleaned_count <- fooddiary_cleaned_count %>% 
+  dplyr::mutate(calories_total_grams = case_when((food_name=="Parboiled rice (coarse)") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Fine rice") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Atta") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Non-parboiled rice (coarse)") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Semai/noodles") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Chira (flattened rice)") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Muri/Khoi (puffed rice)") ~ calories_grams*(food_type_quant*1000)))
+# meats (mostly changed to kg)
+fooddiary_cleaned_count <- fooddiary_cleaned_count %>% 
+  dplyr::mutate(calories_total_grams = case_when((food_name=="Beef/buffalo") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Mutton") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Chicken") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Pigeon") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Fish egg") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Egg") ~ calories_grams*(food_type_quant*50), # egg weighs 50g
+                                                (food_name=="Duck") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Stomach of beef/goat") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Dried meat") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Bids/bok/gughu") ~ calories_grams*(food_type_quant*1000),
+                                                (food_name=="Liver") ~ calories_grams*(food_type_quant*1000)))
+
+# oil (changed to 15ml)
+fooddiary_cleaned_count <- fooddiary_cleaned_count %>% 
+  dplyr::mutate(calories_total_grams = case_when((food_name=="Soybean") ~ calories_grams*(food_type_quant*15),
+                                                (food_name=="Mustard") ~ calories_grams*(food_type_quant*15),
+                                                (food_name=="Dalda/banspati") ~ calories_grams*(food_type_quant*15),
+                                                (food_name=="Red Palm Oil") ~ calories_grams*(food_type_quant*15),
+                                                (food_name=="Ghee") ~ calories_grams*(food_type_quant*15),
+                                                (food_name=="Sesame oil") ~ calories_grams*(food_type_quant*15), 
+                                                (food_name=="Yellow Palm Oil") ~ calories_grams*(food_type_quant*15)))
+# drinks/dairy (can = 340grams/12 fl oz)
+fooddiary_cleaned_count <- fooddiary_cleaned_count %>% 
+  dplyr::mutate(calories_total_grams = case_when((food_name=="Tea –prepared") ~ calories_grams*(food_type_quant*340),
+                                                (food_name=="Coke/ Seven-up etc/Pepci/RC/Urocola etc") ~ calories_grams*(food_type_quant*340),
+                                                (food_name=="Milk") ~ calories_grams*(food_type_quant*340),
+                                                (food_name=="Milk in Tea") ~ calories_grams*(food_type_quant*340),
+                                                (food_name=="Powdered Milk") ~ calories_grams*(food_type_quant*340),
+                                                (food_name=="Condensed Milk") ~ calories_grams*(food_type_quant*340),
+                                                (food_name=="Butter") ~ calories_grams*(food_type_quant*113), # serving of butter
+                                                (food_name=="Yogurt") ~ calories_grams*(food_type_quant*340),
+                                                (food_name=="Cottage cheese or Paneer") ~ calories_grams*(food_type_quant*340), 
+                                                (food_name=="Buttermilk") ~ calories_grams*(food_type_quant*340), 
+                                                (food_name=="Solid Cheese Curds") ~ calories_grams*(food_type_quant*340), 
+                                                (food_name=="Ice Cream") ~ calories_grams*(food_type_quant*340)))
+           
+
+# fish small (avg  small calorie count 340)
+# some gura mach in 500 for quantity.....fix later???????
+fooddiary_cleaned_count <- fooddiary_cleaned_count %>% 
+  dplyr::mutate(calories_total_grams = case_when((food_name=="Gura mach") ~ food_type_quant*340,
+                                                 (food_name=="Panch mishali") ~ food_type_quant*340,
+                                                 (food_name=="Palshe") ~ food_type_quant*340,
+                                                 (food_name=="Tatkeni") ~ food_type_quant*340,
+                                                 (food_name=="Puti") ~ food_type_quant*340,
+                                                 (food_name=="Tengra") ~ food_type_quant*340,
+                                                 (food_name=="Karfu fish") ~ food_type_quant*340,
+                                                 (food_name=="Bata") ~ food_type_quant*340,
+                                                 (food_name=="Kajari") ~ food_type_quant*340,
+                                                 (food_name=="Small prawn") ~ food_type_quant*340,
+                                                 (food_name=="Dried small shrimp/prawn") ~ food_type_quant*340))
+
+# fish large (avg large fish calorie count 510)
+fooddiary_cleaned_count <- fooddiary_cleaned_count %>% 
+  dplyr::mutate(calories_total_grams = case_when((food_name=="Rui") ~ food_type_quant*510,
+                                                 (food_name=="Telapia") ~ food_type_quant*510,
+                                                 (food_name=="Swarputi") ~ food_type_quant*510,
+                                                 (food_name=="Singi") ~ food_type_quant*510,
+                                                 (food_name=="Grass Carp") ~ food_type_quant*510,
+                                                 (food_name=="Taki") ~ food_type_quant*510,
+                                                 (food_name=="Pangash") ~ food_type_quant*510,
+                                                 (food_name=="Silver Carp") ~ food_type_quant*510,
+                                                 (food_name=="Mrigel") ~ food_type_quant*510,
+                                                 (food_name=="Kalibaus") ~ food_type_quant*510,
+                                                 (food_name=="Hilsa") ~ food_type_quant*510,
+                                                 (food_name=="Katla") ~ food_type_quant*510,
+                                                 (food_name=="Jatka") ~ food_type_quant*510,
+                                                 (food_name=="Aair") ~ food_type_quant*510,
+                                                 (food_name=="Boal") ~ food_type_quant*510,
+                                                 (food_name=="Dried fish") ~ food_type_quant*510,
+                                                 (food_name=="Mirror Carp") ~ food_type_quant*510))
+
+# fix vegetables
+"Patal"                                   "Okra"                                    "Eggplant"                               
+"Bitter gourd"                            "Radish"                                  "Pumpkin"                                
+"Green chili"                             "Potato"                                  "Sheem"                                  
+"Onion"                                   "Tomato"                                  "Sweet gourd"                            
+"Garlic"                                  "Water gourd"                             "Drum stick"                             
+"Carrot"                                  "Green banana"                            "Cauliflower"                            
+"Danta (amaranth)"                        "Green Papaya"                            "Ash gourd"                              
+"Cucumber"                                "Kachu (arum)"                            "Sweet potato"                           
+"Green mango"                             "Dhundal"                                 "Kachur lati"                            
+"Green pea"                               "Green jackfruit"                         "Mete alu"                               
+"Beher gura"                              "Soybean bori"                            "Kakrol"                                 
+"Shalgom"                                 
+
+# spices (avg calorie count 5)
+fooddiary_cleaned_count <- fooddiary_cleaned_count %>% 
+  dplyr::mutate(calories_total_grams = case_when((food_name=="Dried chili") ~ food_type_quant*5,
+                                                 (food_name=="Elachi") ~ food_type_quant*5,
+                                                 (food_name=="Cinnamon") ~ food_type_quant*5,
+                                                 (food_name=="Fresh Ginger") ~ food_type_quant*5))
+
+# pulses (avg calorie count 160)
+fooddiary_cleaned_count <- fooddiary_cleaned_count %>% 
+  dplyr::mutate(calories_total_grams = case_when((food_name=="Khesari") ~ food_type_quant*160,
+                                                 (food_name=="Shem bitchi") ~ food_type_quant*160,
+                                                 (food_name=="Anchor daal") ~ food_type_quant*160,
+                                                 (food_name=="Dried Chick pea") ~ food_type_quant*160,
+                                                 (food_name=="Mung") ~ food_type_quant*160,
+                                                 (food_name=="Black gram") ~ food_type_quant*160,
+                                                 (food_name=="Dried Pea") ~ food_type_quant*160,
+                                                 (food_name=="Groundnut") ~ food_type_quant*160,
+                                                 (food_name=="Brazilnut") ~ food_type_quant*160,
+                                                 (food_name=="Cashew Nut") ~ food_type_quant*160,
+                                                 (food_name=="Almond/Badam") ~ food_type_quant*160,
+                                                 (food_name=="Hazelnut") ~ food_type_quant*160,
+                                                 (food_name=="Chestnut") ~ food_type_quant*160))
+
+# other food (50 for now)
+fooddiary_cleaned_count <- fooddiary_cleaned_count %>% 
+  dplyr::mutate(calories_total_grams = case_when((food_name_type=="otherfoodohome") ~ food_type_quant*50))
+# "Pitha"                                   "Ruti/Parota"                            
+# "Rice/Jao"                                "Singara"                                 "Piaju"                                  
+# "Cake"                                    "Nimki"                                   "Puri"                                   
+# "Alur chap"                               "Biscuit"                                 "Bonroti/paoroti"                        
+# "Polao/Biryani/Tehari"                    "Patties"                                 "Khichuri"                               
+# "Chips"                                   "Chewing gum"                                                          
+
+# other food (50 for now)
+fooddiary_cleaned_count <- fooddiary_cleaned_count %>% 
+  dplyr::mutate(calories_total_grams = case_when((food_name_type=="vegetables") ~ food_type_quant*50))                       
+# vegetables
+"Lal Shak (red amaranth)"                 "Bathua"                                  "Pat Shak"
+"Dheki Shak"                              "Pui (Indian spinach)"                    "Dhania Shak"                            
+"Lau Shak"                                "Onion/garlic stalk"                      "Kalmi Shak"                             
+"Kachu Shak"                              "Kalo kachu Shak"                         "Radish leaves"                          
+"Cabbage"                                 "Helencha"                                "Katanate"                               
+"Palang Shak (spinach)"                   "Pea leaves"                              "Drumstick leaves"                       
+"Mustard leaves"                          "Mixed leafy vegetables"                  "Dudhali Pata"                           
+"Black gram leaves"                       "Swett gourd leaves"                      "Khesari Shak"                           
+"Geema Shak"                              "Neem Shak"                               "Darkuni Shak"                           
+"Bokful"                                  "Litchis"                                 
+
+# fruit
+"Apple"                                  
+"Karambola"                               "Mango"                                   "Banana"                                 
+"Grapes"                                  "Guava"                                   "Lemon"                                  
+"Jujube/dried jujube"                     "Dates"                                   "Orange"                                 
+"Olive"                                   "Coconut"                                 "Bel"                                    
+"Amra"                                    "Chalta"                                  "Green Coconut"                          
+"Papaya"                                  "Jack Fruit"                              "Ata (bullock's heart)"                  
+"Black berry"                             "Pomelo"                                  "Tamarind"                               
+"Dalim"                                   "Tarmuj (Water melon)"                    "Bangi (Musk melon)"                     
+"Pine apple"                              "Sobeda"                                  "Jaamrul"                                
+
+# sensativity analysis  
+# cluster 
 ```
+
 
 ## Plots
 ```{r}
-p1 <- ggplot(fooddiary_cleaned, aes(x=submission_month, y=calories_grams)) +
+fooddiary_nocounts <- fooddiary_cleaned %>% filter(food_type_unit != 8) %>% filter(recall=="week")
+
+p1 <- ggplot(fooddiary_nocounts, aes(x=submission_month, y=calories_total_grams)) +
   geom_line(color="#69b3a2", size=2) +
   ggtitle("Calories reported by month")
 
-p2 <- ggplot(fooddiary_cleaned, aes(x=week_number, y=calories_grams)) +
+p2 <- ggplot(fooddiary_nocounts, aes(x=week_number, y=calories_total_grams)) +
   geom_line(color="#69b3a2", size=2) +
   ggtitle("Calories reported by week")
 
-p3 <- ggplot(fooddiary_cleaned, aes(x=time_of_day, y=calories_grams)) +
+p3 <- ggplot(fooddiary_nocounts, aes(x=time_of_day, y=calories_total_grams)) +
   geom_line(color="#69b3a2", size=2) +
   ggtitle("Calories reported by time of day")
 
-p4 <- ggplot(fooddiary_cleaned, aes(x=submission_weekday, y=calories_grams)) +
+p4 <- ggplot(fooddiary_nocounts, aes(x=submission_weekday, y=calories_total_grams)) +
   geom_line(color="#69b3a2", size=2) +
   ggtitle("Calories reported by day of the week")
 
@@ -865,7 +1018,32 @@ p2
 p3
 p4
 ```
+```{r fig1, fig.height = 3.5, fig.width = 3.5}
+p1 <- fooddiary_nocounts %>%
+  filter(recall=="week") %>%
+  ggplot(aes(food_name_type)) +
+      geom_bar(fill = "darkorchid4") +
+      facet_wrap( ~ submission_month, ncol = 4) +
+      labs(title = "Food Types Reported by Week",
+           subtitle = " ",
+           y = "count",
+           x = "food group") + theme_bw(base_size = 15)
+p1 + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
 
+Look for Ramadan and Manga
+```{r fig2, fig.height = 3.5, fig.width = 3.5}
+# fooddiary_cleaned <- fooddiary_cleaned %>% mutate(calories_total_kg = calories_total_grams/1000)
+
+fooddiary_cleaned_week <- fooddiary_nocounts 
+xyplot(
+  calories_total_grams ~ submission_month | food_name_type, 
+  # layout = c(2, 7),               # panel with ncol = 5 and nrow = 3
+  group = food_name_type, data = fooddiary_cleaned_week,
+  type = c("p", "smooth"),        # Show points and smoothed line
+  scales = "free"                 # Make panels axis scales independent
+  )
+```
 
 # Notes
 Responses in food diary:
