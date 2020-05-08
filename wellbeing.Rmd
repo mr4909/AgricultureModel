@@ -33,7 +33,7 @@ setwd(mydirectory)
 
 filenames <- list.files(path=mydirectory, pattern=".*dta")
 
-# read in each dta file
+# read in each dta file found in Dataset folder
 filenames <- list.files(path=mydirectory, pattern=".*dta")
 for (i in 1:length(filenames)){
   assign(filenames[i], read_dta(paste("", filenames[i], sep=''))
@@ -113,10 +113,12 @@ hh_children <- hh_children %>% mutate(numChildren = n) %>% select(hh_ID, numChil
 
 # merge datasets
 hh_all <- merge(hh_children, hh_all, by = "hh_ID")
-  
-##########################
-# Data by resondents
-##########################
+
+hh_all <- merge(hh_all, hh_count, by = c("hh_ID","member_1_ID"))
+head(hh_all)
+```
+
+```{r}
 
 # data about respondents
 hh_respondent <- hh_all %>% filter(hhm_relation == 1)
@@ -125,6 +127,14 @@ hh_respondent <- hh_all %>% filter(hhm_relation == 1)
 # Health by Household
 ##########################
 
+# create is underweight variable
+hh_all <- hh_all %>% mutate(isUnderweight = ifelse(bmi < 18.5, 1, 0))
+# create pct or underweight in the household variable
+underweight <- hh_all %>% group_by(hh_ID) %>% tally(isUnderweight)
+hh_all <- merge(hh_all, underweight, by = "hh_ID")
+hh_all <- hh_all %>% mutate(totalUnderweight = n) %>% select(-n)
+hh_all <- hh_all %>%mutate(pctUnderweight = totalUnderweight/hh_members) %>% select(-totalUnderweight)
+
 # count health measures per household
 hh_subset <- hh_all %>% select(hh_ID, member_1_ID, bmi, canCarry20L, canWalk5Km, canStandOwn)
           carry <- hh_subset %>% group_by(hh_ID) %>% tally(canCarry20L)
@@ -132,15 +142,18 @@ hh_subset <- hh_all %>% select(hh_ID, member_1_ID, bmi, canCarry20L, canWalk5Km,
           stand <- hh_subset %>% group_by(hh_ID) %>% tally(canStandOwn)
 
 # determine percentage of health measure per household
-hh_health <- merge(hh_count, carry, by = "hh_ID") 
+hh_health <- merge(hh_all, carry, by = "hh_ID") 
 hh_health <- merge(hh_health, walk, by = "hh_ID") 
 hh_health <- merge(hh_health, stand, by = "hh_ID") 
+
+# clean and select variables
 hh_health <- hh_health %>% select(hh_ID,
                                     member_1_ID,
                                     hh_members,
                                     canCarry20L = n.x,
                                     canWalk5Km = n.y,
-                                    canStandOwn = n) %>% 
+                                    canStandOwn = n,
+                                    pctUnderweight) %>% 
                              mutate(pctCanCarry20L = canCarry20L/hh_members,
                                     pctCanWalk5Km = canWalk5Km/hh_members,
                                     pctCanStandOwn = canStandOwn/hh_members)
@@ -153,8 +166,31 @@ hh_health <- hh_health %>% filter(pctCanCarry20L <= 1 &
 hh_char <- merge(hh_health, hh_children, by = "hh_ID")
 hh_char <- hh_char %>% select(-member_1_ID)
 
+# # create is underweight variable
+# hh_char <- hh_char %>% mutate(isUnderweight = ifelse(bmi < 18.5, 1, 0))
+# # create pct or underweight in the household variable
+# underweight <- hh_all %>% group_by(hh_ID) %>% tally(isUnderweight)
+# hh_all <- merge(hh_all, underweight, by = "hh_ID")
+# hh_all <- hh_all %>% mutate(totalUnderweight = n) %>% select(-n)
+
 # TRUE, if there are no duplicates in hh_ID
 # length(unique(hh_char$hh_ID)) == nrow(hh_char)
+
+####################################################
+# Health Measures, Num of Children, Num Household Members, Has Underweight Members
+####################################################
+head(hh_char)
+
+####################################################
+# Add respondent info
+####################################################
+
+# select respondent info
+hh_respondent_info <- hh_respondent %>% select(hh_ID, sex, age, maritalStatus, literacy, education, attendingCollege, occupationType, bmiCategory)
+# merge respondent info with household info
+hh_char <- merge(hh_respondent_info, hh_char, by = "hh_ID")
+
+head(hh_char)
 ```
 
 ```{r}
@@ -215,6 +251,10 @@ housing_all <- housing_all %>% select(-sanitation_1_ID,-expiration_date,
 # merge datasets
 housing_all <- merge(housing_all_years_fixed, housing_all, by = c("hh_ID"))
 
+#############################
+# reduce factor levels 
+#############################
+
 # water_purify - too many factor levels
 housing_all <- housing_all %>% mutate(does_water_purify = ifelse(water_purify==1, 0, 1))
 
@@ -222,12 +262,51 @@ housing_all <- housing_all %>% mutate(does_water_purify = ifelse(water_purify==1
 housing_all <- housing_all %>% mutate(garbage_collected = ifelse(garbage==1|garbage==2, 1, 0))
 
 # lighting_source - too many factor levels - What is your main source of lighting fuel?
-housing_all <- housing_all %>% mutate(lighting_source_elec = ifelse(lighting_source==1 | lighting_source==3, 1, 0))
+# housing_all <- housing_all %>% mutate(lighting_source_elec = ifelse(lighting_source==1 | lighting_source==3, 1, 0))
+housing_all$lighting_source_type = as.factor(
+    ifelse(housing_all$lighting_source %in% c('1'),'electricity',
+        ifelse(housing_all$lighting_source %in% c('3'),'solar',
+        ifelse(housing_all$lighting_source %in% c('4'),'kerosine','other'))))
 
-# fuel_source - too many factor levels - What is your main source of cooking fuel?
+# fuel_source - too many factor levels - What is your main source of cooking fuel? 
+# fuel	1	Electricity
+# fuel	2	Supply gas
+# fuel	3	LPG
+# fuel	4	Kerosene
+# fuel	5	Firewood
+# fuel	6	Dried cow dung
+# fuel	7	Coal
+# fuel	8	Rice bran/saw dust
+# fuel	9	Dried leaves
+# fuel	10	Other (specify)
 housing_all <- housing_all %>% mutate(fuel_source_wood = ifelse(fuel_source==5, 1, 0))
 
+
 # housing materials - too many factor levels, combine smaller levels
+# material	1	Concrete/Brick  
+# material	2	Tin/CI Sheet  
+# material	3	Wood  
+# material	4	Mud  
+# material	5	Bamboo  
+# material	6	Jute straw  
+# material	7	Plastic /Polythene  
+# material	8	Cardboard/paper  
+# material	9	Golpaata/Palm leaf  
+# material	10	Grass/Straw  
+# material	11	Other (specify)  
+
+# > table(housing_all$houseroof_material)
+#   1   2   3   4   5   6   7 
+#   9 238   9   3  73   1   2 
+
+# > table(housing_all$housewall_material)
+#   1   2   3   4   5   8 
+# 159 115   9   9  42   1 
+
+# > table(housing_all$housefloor_material)
+#   1   2   3   4   5  99 
+# 113   2   3 212   2   3 
+
 housing_all$housefloor_material = as.factor(
     ifelse(housing_all$housefloor_material %in% c('1'),
         'concrete',
@@ -283,28 +362,16 @@ housing_all$houseroof_material <- factor(housing_all$houseroof_material, ordered
 housing_all$housefloor_material <- factor(housing_all$housefloor_material, ordered = TRUE,
                                           levels = c("concrete","mud","other"))
 
-# > table(housing_all$houseroof_material)
-#   1   2   3   4   5   6   7 
-#   9 238   9   3  73   1   2 
-
-# > table(housing_all$housewall_material)
-#   1   2   3   4   5   8 
-# 159 115   9   9  42   1 
-
-# > table(housing_all$housefloor_material)
-#   1   2   3   4   5  99 
-# 113   2   3 212   2   3 
-
 ##########
 # factor variables
 ##########
 housing_all$house_elec  <- factor(housing_all$house_elec)
-housing_all$fuel_source_wood  <- factor(housing_all$fuel_source_wood)
-housing_all$lighting_source_elec  <- factor(housing_all$lighting_source_elec)
 housing_all$water_supply  <- factor(housing_all$water_supply)
-housing_all$drinking_source_same <- factor(housing_all$drinking_source_same)
-housing_all$does_water_purify <- factor(housing_all$does_water_purify)
 housing_all$garbage_collected <- factor(housing_all$garbage_collected)
+housing_all$lighting_source_type  <- factor(housing_all$lighting_source_type)
+housing_all$does_water_purify <- factor(housing_all$does_water_purify)
+housing_all$drinking_source_same <- factor(housing_all$drinking_source_same)
+housing_all$fuel_source_wood  <- factor(housing_all$fuel_source_wood)
 
 str(housing_all)
 ```
@@ -388,7 +455,21 @@ housing_all <- merge(nonagricultural_enterprise, housing_all, by = c("hh_ID"))
 ## Facilities
 ####################################################
 
-facilities <- `20. Facilities_level_1.dta` %>% select(hh_ID,submissiondate, facilities, fac_count)
+facilities <- `20. Facilities_level_1.dta` %>% select(hh_ID, facility_1_ID, submissiondate, facilities, fac_count)
+# fasc	1	Health center/hospital
+# fasc	2	Bus stop
+# fasc	3	Main road
+# fasc	4	Railway station
+# fasc	5	Local shop/shops
+# fasc	6	Weekly/periodic bazaar
+# fasc	7	Nearest town
+# fasc	8	College
+# fasc	9	Agricultural office
+# fasc	10	Post office
+# fasc	11	Bank
+# fasc	12	BRAC
+# fasc	13	Grameen Bank
+# fasc	14	ASA
 
 # there are too many variations on the types of facilities visited, so change to:
 # visits health centers, bazaar, local shops
@@ -411,6 +492,63 @@ facilities <- facilities %>% select(-submissiondate)
 facilities$visits_healthcenter <- factor(facilities$visits_healthcenter)
 facilities$visits_bazaar <- factor(facilities$visits_bazaar)
 facilities$visits_localshop <- factor(facilities$visits_localshop)
+
+# import second facilities dataset
+facilities2 <- `21. Facilities_facility_repeat_level_2.dta` %>% select(hh_ID, facility_1_ID, fac_mode, fac_dist, time_taken, time_units)
+
+# clean modes of transportation
+# mode	1	Foot #693
+# mode	2	Bicycle #616
+# mode	3	Rickshaw/Van #472
+# mode	4	Bullock cart #3
+# mode	5	Boat #3
+# mode	6	Engine Boat #3
+# mode	7	Motorcycle #264
+# mode	8	Tempo/Baby Taxi/Nosimon #103
+# mode	9	Bus stop #40
+# mode	10	Train #0
+# mode	11	Other #0
+
+# find totals
+# foot <- sum(grepl("1",facilities2$fac_mode))
+# bicycle <- sum(grepl("2",facilities2$fac_mode))
+# rickshawvan <- sum(grepl("3",facilities2$fac_mode))
+# cart <- sum(grepl("4",facilities2$fac_mode))
+# boat <- sum(grepl("5",facilities2$fac_mode))
+# engine_boat <- sum(grepl("6",facilities2$fac_mode))
+# motorcycle <- sum(grepl("7",facilities2$fac_mode))
+# tempo <- sum(grepl("8",facilities2$fac_mode))
+# bus <- sum(grepl("9",facilities2$fac_mode))
+# train <- sum(grepl("10",facilities2$fac_mode))
+# other <- sum(grepl("11",facilities2$fac_mode))
+
+facilities2 <- facilities2 %>% mutate(fac_mode = ifelse(grepl("1", fac_mode), "foot",
+                                                 ifelse(grepl("2", fac_mode), "bicycle",
+                                                 ifelse(grepl("3", fac_mode), "rickshaw_van",
+                                                 ifelse(grepl("7", fac_mode), "motorcycle",
+                                                 ifelse(grepl("8", fac_mode), "nosimon",
+                                                 ifelse(grepl("9", fac_mode), "busstop", other)))))))
+
+# standardize time_taken to facility 
+# units	1	minutes, on foot
+# units	2	minutes, by bicycle
+# units	3	minutes, by motorcycle or van
+# units	4	minutes, by boat
+# units	5	hours, on foot
+# units	6	hours, by bicycle
+# units	7	hours, by motorcycle or van
+# units	8	hours, by boat
+
+
+
+
+
+
+
+
+
+# merge facilties dataframes together
+facilities <- merge(facilities, facilities2, by = c("hh_ID","facility_1_ID"))
 
 # merge with household characteristics
 housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
@@ -863,6 +1001,7 @@ fooddiary_cleaned <- fooddiary_cleaned %>% select(hh_ID,
                                                   food_3_ID)
 ```
 
+## Fix Food Units Claimed As Counts
 ```{r}
 
 #####################################
@@ -1079,10 +1218,19 @@ fooddiary_count <- fooddiary_count %>% mutate(calories_total_grams = case_when(f
 ```
 
 
-## Plots
+
+## For now using data excluding the "counts". Data is too messy.
+
 ```{r}
+# all records without unit = 8 (counts)
 fooddiary_nocounts <- fooddiary_cleaned %>% filter(food_type_unit != 8) %>% filter(recall=="week")
 
+# 
+```
+
+
+## Plots
+```{r}
 p1 <- ggplot(fooddiary_nocounts, aes(x=submission_month, y=calories_total_grams)) +
   geom_line(color="#69b3a2", size=2) +
   ggtitle("Calories reported by month")
