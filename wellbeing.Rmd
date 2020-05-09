@@ -948,15 +948,48 @@ pca_data <- merge(categorical_variables, continuous_variables, by ="hh_ID")
 
 # remove NAs
 pca_data_noNAs <- pca_data[complete.cases(pca_data),]
-# recode dummy frame
-pca_data_noNAs <- dummy.data.frame(pca_data_noNAs)
+# # recode dummy frame
+# pca_data_noNAs <- dummy.data.frame(pca_data_noNAs)
+# 
+# str(pca_data_noNAs)
 ```
 
 # PCA
 
-# Figure out dimensions of well-being using Factor Analysis
+## Figure out dimensions of well-being using Factor Analysis
 
+http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/112-pca-principal-component-analysis-essentials/
 http://www.di.fc.ul.pt/~jpn/r/factoranalysis/factoranalysis.html#factor-analysis-vs.pca
+
+```{r}
+# install.packages("polycor")
+# library(polycor)
+# C <- as.matrix(hetcor(data=pca_data_noNAs))
+# 
+# # Run PCA
+# pca <- princomp(covmat=C)
+# L <- loadings(pca)
+# L
+# # Calculate Scores
+# scores <- data * L
+
+library(PCAmixdata)
+
+pca_data_PCAmixdata <- pca_data_noNAs %>% select(-hh_ID)
+
+pca_data_PCAmixdata <- lapply(pca_data_PCAmixdata, function(x) as.numeric(as.integer(x)))
+
+pca_data_PCAmixdata <- sapply(pca_data_PCAmixdata, as.numeric)
+pca_data_PCAmixdata <- as.data.frame(pca_data_PCAmixdata)
+
+X.quanti <- splitmix(pca_data_PCAmixdata)$X.quanti
+X.quali <- splitmix(pca_data_PCAmixdata)$X.quali
+pca<-PCAmix(X.quanti[,1:27],X.quali,ndim=4)
+pca<-PCAmix(X.quanti[,1:27],X.quali,ndim=4,graph=FALSE)
+pca$eig
+pca$ind$coord
+```
+
 
 # Food Diary
 ```{r}
