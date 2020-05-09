@@ -110,11 +110,12 @@ hh_all$maritalStatus = factor(hh_all$maritalStatus)
 hh_all$literacy = factor(hh_all$literacy)
 hh_all$education = factor(hh_all$education)
 hh_all$attendingCollege = factor(hh_all$attendingCollege)
-# hh_all$canCarry20L = factor(hh_all$canCarry20L)
-# hh_all$canWalk5Km = factor(hh_all$canWalk5Km)
-# hh_all$canStandOwn = factor(hh_all$canStandOwn)
+hh_all$canCarry20L = factor(hh_all$canCarry20L)
+hh_all$canWalk5Km = factor(hh_all$canWalk5Km)
+hh_all$canStandOwn = factor(hh_all$canStandOwn)
 hh_all$occupationType = factor(hh_all$occupationType)
 hh_all$bmiCategory = factor(hh_all$bmiCategory)
+
 
 # does hh have children?
 hh_all <- hh_all %>% mutate(isChild = ifelse(age>=18, 0, 1))
@@ -123,6 +124,8 @@ hh_children <- hh_children %>% mutate(numChildren = n) %>% select(hh_ID, numChil
 
 # merge number of children dataset with hh_all
 hh_all <- merge(hh_children, hh_all, by = "hh_ID")
+# factor variables
+hh_all$isChild <- factor(hh_all$isChild)
 
 head(hh_all)
 ```
@@ -152,12 +155,13 @@ hh_health <- merge(hh_all, carry, by = "hh_ID")
 hh_health <- merge(hh_health, walk, by = "hh_ID") 
 hh_health <- merge(hh_health, stand, by = "hh_ID") 
 
-hh_health <- hh_health %>% mutate(canCarry20L = n.x,
-                                  canWalk5Km = n.y,
-                                  canStandOwn = n)
-hh_health <- hh_health %>% mutate(pctCanCarry20L = canCarry20L/hh_members,
-                                  pctCanWalk5Km = canWalk5Km/hh_members,
-                                  pctCanStandOwn = canStandOwn/hh_members) %>% 
+hh_health <- hh_health %>% mutate(totalCanCarry20L = n.x,
+                                  totalCanWalk5Km = n.y,
+                                  totalCanStandOwn = n)
+
+hh_health <- hh_health %>% mutate(pctCanCarry20L = totalCanCarry20L/hh_members,
+                                  pctCanWalk5Km = totalCanWalk5Km/hh_members,
+                                  pctCanStandOwn = totalCanStandOwn/hh_members) %>% 
                            select(-n.x,-n.y,-n)
 
 # remove percentages above 100, differences in number of members
@@ -445,7 +449,6 @@ housing_all <- merge(nonagricultural_enterprise, housing_all, by = c("hh_ID"))
 # check for duplicates 
 housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 ```
-
 
 ```{r}
 ####################################################
@@ -860,71 +863,79 @@ Don't need info below for now. Information by specific plot.
 ```
 
 ```{r}
-str(housing_all)
-
-
+# check data types
+str(final_df)
 
 #########################################################
 # Separate categorical variables and continuous variables
 #########################################################
-categorical_variables <- housing_all %>% select(visits_healthcenter
-                                                visits_bazaar
-                                                visits_localshop    
-                                                business
-                                                use_lat
-                                                main_use_flush
-                                                defecation_public
-                                                housewall_material
-                                                houseroof_material 
-                                                housefloor_material
-                                                house_elec
-                                                water_suppl
-                                                drinking_source_same
-                                                does_water_purify
-                                                garbage_collected
-                                                lighting_source_type
-                                                fuel_source_wood
-                                                totalCultivablePlot
+categorical_variables <- final_df %>% select(hh_ID,
+                                             visits_healthcenter,
+                                                visits_bazaar,
+                                                visits_localshop,
+                                                business,
+                                                use_lat,
+                                                main_use_flush,
+                                                defecation_public,
+                                                housewall_material,
+                                                houseroof_material,
+                                                housefloor_material,
+                                                house_elec,
+                                                water_supply,
+                                                drinking_source_same,
+                                                does_water_purify,
+                                                garbage_collected,
+                                                lighting_source_type,
+                                                fuel_source_wood,
+                                                totalCultivablePlot,
                                                 totalOwnPlot,
-                                                sex
-                                                maritalStatus
-                                                literacy
-                                                education
-                                                attendingCollege
-                                                occupationType
-                                                bmiCategory
+                                                sex,
+                                                maritalStatus,
+                                                literacy,
+                                                education,
+                                                attendingCollege,
+                                                occupationType,
+                                                bmiCategory,
                                                 isChild,
-                                                respCanCarry20L,
-                                                respcanWalk5Km,
-                                                respcanStandOwn)
-continuous_variables <- hh_data %>% select(hh_ID,
-                                           size_plot, 
-                                            flood_depth, 
-                                            dis_from_home, 
-                                            cur_mv, 
-                                            plot_age, 
-                                            fac_count,
-                                            count_latrine, 
-                                            rent_estimate, 
-                                            house_age,
-                                            rent_estimate,
-                                            house_rooms, 
-                                            house_rooms_sleeping,
-                                            house_sharing,
-                                            house_age, 
-                                            fuel_cost, 
-                                            lighting_cost, 
-                                            cell_cost, 
-                                            cellphone,
-                                            fac_count,
-                                            numChildren,
-                                            pctCanCarry20L,
-                                            pctCanWalk5Km,
-                                            pctCanStandOwn,
-                                            hh_members)
+                                                canCarry20L,
+                                                canWalk5Km,
+                                                canStandOwn)
+
+continuous_variables <- final_df %>% select(-visits_healthcenter,
+                                            -visits_bazaar,
+                                            -visits_localshop,
+                                            -business,
+                                            -use_lat,
+                                            -main_use_flush,
+                                            -defecation_public,
+                                            -housewall_material,
+                                            -houseroof_material,
+                                            -housefloor_material,
+                                            -house_elec,
+                                            -water_supply,
+                                            -drinking_source_same,
+                                            -does_water_purify,
+                                            -garbage_collected,
+                                            -lighting_source_type,
+                                            -fuel_source_wood,
+                                            -totalCultivablePlot,
+                                            -totalOwnPlot,
+                                            -sex,
+                                            -maritalStatus,
+                                            -literacy,
+                                            -education,
+                                            -attendingCollege,
+                                            -occupationType,
+                                            -bmiCategory,
+                                            -isChild,
+                                            -canCarry20L,
+                                            -canWalk5Km,
+                                            -canStandOwn)
 
 # scale continuous variables
-continuous_variables1 <- apply(continuous_variables[,2:22], 2, scale)
+# scale variables except hh_ID
+continuous_variables1 <- apply(continuous_variables[,2:23], 2, scale)
+# add df back together
 continuous_variables <- data.frame(continuous_variables1,continuous_variables$hh_ID)
 continuous_variables <- continuous_variables %>% mutate(hh_ID = continuous_variables.hh_ID) %>% select(-continuous_variables.hh_ID)
 
@@ -933,12 +944,12 @@ continuous_variables <- continuous_variables %>% mutate(hh_ID = continuous_varia
 ##################################
 
 # merge categorical and continous variables into one dataframe
-final_hh_data <- merge(categorical_variables, continuous_variables, by ="hh_ID")
+pca_data <- merge(categorical_variables, continuous_variables, by ="hh_ID")
 
 # remove NAs
-final_hh_data_noNAs <- final_hh_data[complete.cases(final_hh_data),]
+pca_data_noNAs <- pca_data[complete.cases(pca_data),]
 # recode dummy frame
-final_hh_data_noNAs <- dummy.data.frame(final_hh_data_noNAs)
+pca_data_noNAs <- dummy.data.frame(pca_data_noNAs)
 ```
 
 # PCA
@@ -1424,6 +1435,7 @@ xyplot(
   scales = "free"                 # Make panels axis scales independent
   )
 ```
+
 
 # Notes
 Responses in food diary:
