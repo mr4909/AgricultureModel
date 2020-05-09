@@ -60,6 +60,8 @@ hh_all <- HouseholdComposition_members_level_2.dta %>% mutate(height_meters = to
                                                               canStandOwn = hhm_health1,
                                                               canWalk5Km = hhm_health2,
                                                               canCarry20L = hhm_health3)
+# merge with hh_count
+hh_all <- merge(hh_count, hh_all, by=c("hh_ID","member_1_ID"))
 
 # BMI categories
 hh_all <- hh_all %>% mutate(bmi = (weight_kg/(height_meters^2)))
@@ -70,8 +72,8 @@ hh_all <- hh_all %>% filter(weight_kg >= 1 & weight_kg <= 100)
 
 # create BMI categories
 hh_all <- hh_all %>% mutate(bmiCategory = ifelse(bmi >= 30, "obese", 
-                                          ifelse(bmi >=25, "overweight", 
-                                          ifelse(bmi >=18.5, "normal", 
+                                          ifelse(bmi >=25 & bmi < 30, "overweight", 
+                                          ifelse(bmi >=18.5 & bmi < 25, "normal", 
                                           ifelse(bmi < 18.5, "underweight", NA)))))
 
 # combine 0 and 77 ("no" and "don't know")
@@ -80,10 +82,13 @@ hh_all <- hh_all %>% mutate(canCarry20L = ifelse(canCarry20L==77 | canCarry20L==
                             canStandOwn = ifelse(canStandOwn==77 | canStandOwn==0, 0, 1))
 
 # 0 = male, 1 = female 
-# select demographic variables
-hh_all <- hh_all %>% mutate(sex = ifelse(hhm_sex == 1,0,1)) %>% 
+# select variables
+hh_all <- hh_all %>% mutate(sex = ifelse(hhm_sex == 1,0,1),) %>% 
                        select(hh_ID,
                               member_1_ID,
+                              member_2_ID,
+                              hh_members,
+                              currentposition,
                               hhm_relation,
                               sex,
                               age = hhm_age,
@@ -92,6 +97,7 @@ hh_all <- hh_all %>% mutate(sex = ifelse(hhm_sex == 1,0,1)) %>%
                               education,
                               attendingCollege = hhm_attending,
                               occupationType = hhm_occu_type,
+                              #hhm_occupation,
                               canCarry20L,
                               canWalk5Km,
                               canStandOwn,
@@ -103,6 +109,10 @@ hh_all$sex = factor(hh_all$sex)
 hh_all$maritalStatus = factor(hh_all$maritalStatus)
 hh_all$literacy = factor(hh_all$literacy)
 hh_all$education = factor(hh_all$education)
+hh_all$attendingCollege = factor(hh_all$attendingCollege)
+# hh_all$canCarry20L = factor(hh_all$canCarry20L)
+# hh_all$canWalk5Km = factor(hh_all$canWalk5Km)
+# hh_all$canStandOwn = factor(hh_all$canStandOwn)
 hh_all$occupationType = factor(hh_all$occupationType)
 hh_all$bmiCategory = factor(hh_all$bmiCategory)
 
@@ -111,10 +121,9 @@ hh_all <- hh_all %>% mutate(isChild = ifelse(age>=18, 0, 1))
 hh_children <- hh_all %>% group_by(hh_ID) %>% tally(isChild)
 hh_children <- hh_children %>% mutate(numChildren = n) %>% select(hh_ID, numChildren)
 
-# merge datasets
+# merge number of children dataset with hh_all
 hh_all <- merge(hh_children, hh_all, by = "hh_ID")
 
-hh_all <- merge(hh_all, hh_count, by = c("hh_ID","member_1_ID"))
 head(hh_all)
 ```
 
@@ -130,7 +139,7 @@ hh_all <- hh_all %>% mutate(isUnderweight = ifelse(bmi < 18.5, 1, 0))
 underweight <- hh_all %>% group_by(hh_ID) %>% tally(isUnderweight)
 hh_all <- merge(hh_all, underweight, by = "hh_ID")
 hh_all <- hh_all %>% mutate(totalUnderweight = n) %>% select(-n)
-hh_all <- hh_all %>%mutate(pctUnderweight = totalUnderweight/hh_members) %>% select(-totalUnderweight)
+hh_all <- hh_all %>%mutate(pctUnderweight = totalUnderweight/hh_members) %>% select(-totalUnderweight,-isUnderweight)
 
 # count health measures per household
 hh_subset <- hh_all %>% select(hh_ID, member_1_ID, bmi, canCarry20L, canWalk5Km, canStandOwn)
@@ -143,55 +152,33 @@ hh_health <- merge(hh_all, carry, by = "hh_ID")
 hh_health <- merge(hh_health, walk, by = "hh_ID") 
 hh_health <- merge(hh_health, stand, by = "hh_ID") 
 
-# clean and select variables
-hh_health <- hh_health %>% select(hh_ID,
-                                    member_1_ID,
-                                    hhm_relation,
-                                    hh_members,
-                                    canCarry20L = n.x,
-                                    canWalk5Km = n.y,
-                                    canStandOwn = n,
-                                    pctUnderweight) %>% 
-                             mutate(pctCanCarry20L = canCarry20L/hh_members,
-                                    pctCanWalk5Km = canWalk5Km/hh_members,
-                                    pctCanStandOwn = canStandOwn/hh_members)
+hh_health <- hh_health %>% mutate(canCarry20L = n.x,
+                                  canWalk5Km = n.y,
+                                  canStandOwn = n)
+hh_health <- hh_health %>% mutate(pctCanCarry20L = canCarry20L/hh_members,
+                                  pctCanWalk5Km = canWalk5Km/hh_members,
+                                  pctCanStandOwn = canStandOwn/hh_members) %>% 
+                           select(-n.x,-n.y,-n)
 
 # remove percentages above 100, differences in number of members
 hh_health <- hh_health %>% filter(pctCanCarry20L <= 1 &
                                   pctCanWalk5Km <= 1 &
                                   pctCanStandOwn <= 1)
 
-hh_char <- merge(hh_health, hh_children, by = "hh_ID")
-hh_char <- hh_char %>% select(-member_1_ID)
-
-# # create is underweight variable
-# hh_char <- hh_char %>% mutate(isUnderweight = ifelse(bmi < 18.5, 1, 0))
-# # create pct or underweight in the household variable
-# underweight <- hh_all %>% group_by(hh_ID) %>% tally(isUnderweight)
-# hh_all <- merge(hh_all, underweight, by = "hh_ID")
-# hh_all <- hh_all %>% mutate(totalUnderweight = n) %>% select(-n)
-
-# TRUE, if there are no duplicates in hh_ID
-# length(unique(hh_char$hh_ID)) == nrow(hh_char)
+####################################################
+# Respondent info and health of household members
+####################################################
 
 # data about respondents
-hh_respondent <- hh_all %>% filter(hhm_relation == 1)
+hh_respondent <- hh_health %>% filter(hhm_relation == 1)
 
-####################################################
-# Health Measures, Num of Children, Num Household Members, Has Underweight Members
-####################################################
-head(hh_char)
+# remove variables
+hh_respondent <- hh_respondent %>% select(-member_1_ID,
+                                          -member_2_ID,
+                                          -currentposition,
+                                          -hhm_relation)
 
-####################################################
-# Add respondent info
-####################################################
-
-# select respondent info
-hh_respondent_info <- hh_respondent %>% select(hh_ID, sex, age, maritalStatus, literacy, education, attendingCollege, occupationType, bmiCategory)
-# merge respondent info with household info
-hh_char <- merge(hh_respondent_info, hh_char, by = "hh_ID")
-
-head(hh_char)
+head(hh_respondent)
 ```
 
 ```{r}
@@ -206,11 +193,11 @@ housing_all <- `41. HousingandSanitation.dta`
 # if there is a hh_ID duplicate, use the first entry
 # question was only supposed to be answered once but some households submitted twice
 ##########
-# TRUE, if there are no duplicates in hh_ID
-# length(unique(housing_all$hh_ID)) == nrow(housing_all)
 housing_all$submissiondate <- as.Date(housing_all$submissiondate, "%b %d, %Y")
 housing_all <- setDT(housing_all)[housing_all[, .I[which.min(submissiondate)], by=hh_ID]$V1]
 housing_all <- housing_all %>% select(-submissiondate)
+# TRUE, if there are no duplicates in hh_ID
+length(unique(housing_all$hh_ID)) == nrow(housing_all)
 ##########
 
 # respondent input year instead of years old
@@ -375,6 +362,8 @@ housing_all$drinking_source_same <- factor(housing_all$drinking_source_same)
 housing_all$fuel_source_wood  <- factor(housing_all$fuel_source_wood)
 
 str(housing_all)
+# check for duplicates 
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 ```
 
 ```{r}
@@ -421,6 +410,9 @@ housing_all <- merge(latrine_all, housing_all, by = c("hh_ID"))
 #housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 
 str(housing_all)
+
+# check for duplicates 
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 ```
 
 ```{r}
@@ -449,14 +441,32 @@ nonagricultural_enterprise$business <- factor(nonagricultural_enterprise$busines
 housing_all <- merge(nonagricultural_enterprise, housing_all, by = c("hh_ID"))
 # housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 #str(housing_all)
+
+# check for duplicates 
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 ```
+
 
 ```{r}
 ####################################################
 ## Facilities
 ####################################################
 
-facilities <- `20. Facilities_level_1.dta` %>% select(hh_ID, facility_1_ID, submissiondate, facilities, fac_count)
+# import first facilities dataset
+facilities <- `20. Facilities_level_1.dta`
+# import second facilities dataset
+facilities2 <- `21. Facilities_facility_repeat_level_2.dta`
+# merge datasets
+facilities_all <- merge(facilities, facilities2, by = c("hh_ID","facility_1_ID"))
+# clean variables
+facilities_all <- facilities_all %>% select(hh_ID,
+                                            submissiondate,
+                                            facilities_visited = facilities.x,
+                                            fac_count,
+                                            fac_mode,
+                                            fac_dist,
+                                            time_taken,
+                                            time_units)
 # fasc	1	Health center/hospital
 # fasc	2	Bus stop
 # fasc	3	Main road
@@ -474,10 +484,26 @@ facilities <- `20. Facilities_level_1.dta` %>% select(hh_ID, facility_1_ID, subm
 
 # there are too many variations on the types of facilities visited, so change to:
 # visits health centers, bazaar, local shops
-facilities$visits_healthcenter <- ifelse(grepl("1",facilities$facilities), 1, 0)
-facilities$visits_bazaar <- ifelse(grepl("6",facilities$facilities), 1, 0)
-facilities$visits_localshop <- ifelse(grepl("5",facilities$facilities), 1, 0)
-facilities <- facilities %>% select(-facilities)
+facilities_all$visits_healthcenter <- ifelse(grepl("1",facilities_all$facilities), 1, 0)
+facilities_all$visits_bazaar <- ifelse(grepl("6",facilities_all$facilities), 1, 0)
+facilities_all$visits_localshop <- ifelse(grepl("5",facilities_all$facilities), 1, 0)
+
+# calculate distance to health center
+healthcenter <- facilities_all %>% filter(visits_healthcenter == 0)
+
+
+
+
+
+
+
+# calculate distance to bazaar
+
+
+# calculate distance to local shop
+
+
+
 
 ##########
 # if there is a hh_ID duplicate, use the first entry
@@ -494,8 +520,13 @@ facilities$visits_healthcenter <- factor(facilities$visits_healthcenter)
 facilities$visits_bazaar <- factor(facilities$visits_bazaar)
 facilities$visits_localshop <- factor(facilities$visits_localshop)
 
+# check for duplicates 
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+```
+
+```{r}
 # import second facilities dataset
-facilities2 <- `21. Facilities_facility_repeat_level_2.dta` %>% select(hh_ID, facility_1_ID, fac_mode, fac_dist, time_taken, time_units)
+facilities2 <- `21. Facilities_facility_repeat_level_2.dta`
 
 # clean modes of transportation
 # mode	1	Foot #693
@@ -529,7 +560,7 @@ facilities2 <- facilities2 %>% mutate(fac_mode = ifelse(grepl("1", fac_mode), "f
                                                  ifelse(grepl("3", fac_mode), "rickshaw_van",
                                                  ifelse(grepl("7", fac_mode), "motorcycle",
                                                  ifelse(grepl("8", fac_mode), "nosimon",
-                                                 ifelse(grepl("9", fac_mode), "busstop", "other")))))))
+                                                 ifelse(grepl("9", fac_mode), "busstop","other")))))))
 
 # convert all units of speed to minutes by foot
 facilities2 <- facilities2 %>% mutate(fac_time_min = ifelse(time_units==1, time_taken*1, 
@@ -554,7 +585,9 @@ facilities$fac_mode <-factor(facilities$fac_mode)
 # merge with household characteristics
 housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
 str(housing_all)
-#housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+
+# check for duplicates 
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 ```
 
 ```{r}
