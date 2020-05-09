@@ -455,18 +455,19 @@ housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 # import first facilities dataset
 facilities <- `20. Facilities_level_1.dta`
 # import second facilities dataset
-facilities2 <- `21. Facilities_facility_repeat_level_2.dta`
-# merge datasets
-facilities_all <- merge(facilities, facilities2, by = c("hh_ID","facility_1_ID"))
+# facilities2 <- `21. Facilities_facility_repeat_level_2.dta`
+# # merge datasets
+# facilities_all <- merge(facilities, facilities2, by = c("hh_ID","facility_1_ID"))
 # clean variables
-facilities_all <- facilities_all %>% select(hh_ID,
-                                            submissiondate,
-                                            facilities_visited = facilities.x,
-                                            fac_count,
-                                            fac_mode,
-                                            fac_dist,
-                                            time_taken,
-                                            time_units)
+# facilities_all <- facilities_all %>% select(hh_ID,
+#                                             submissiondate,
+#                                             facilities_visited = facilities.x,
+#                                             facility_info = facilities.y,
+#                                             fac_count,
+#                                             fac_mode,
+#                                             fac_dist,
+#                                             time_taken,
+#                                             time_units)
 # fasc	1	Health center/hospital
 # fasc	2	Bus stop
 # fasc	3	Main road
@@ -482,28 +483,23 @@ facilities_all <- facilities_all %>% select(hh_ID,
 # fasc	13	Grameen Bank
 # fasc	14	ASA
 
+# # calculate distance to health center (only 200 records)
+# healthcenter <- facilities_all %>% filter(facility_info == 6)
+# could be useful to calculate avg distance to facility
+
 # there are too many variations on the types of facilities visited, so change to:
 # visits health centers, bazaar, local shops
-facilities_all$visits_healthcenter <- ifelse(grepl("1",facilities_all$facilities), 1, 0)
-facilities_all$visits_bazaar <- ifelse(grepl("6",facilities_all$facilities), 1, 0)
-facilities_all$visits_localshop <- ifelse(grepl("5",facilities_all$facilities), 1, 0)
+facilities$visits_healthcenter <- ifelse(grepl("1",facilities$facilities), 1, 0)
+facilities$visits_bazaar <- ifelse(grepl("6",facilities$facilities), 1, 0)
+facilities$visits_localshop <- ifelse(grepl("5",facilities$facilities), 1, 0)
 
-# calculate distance to health center
-healthcenter <- facilities_all %>% filter(visits_healthcenter == 0)
-
-
-
-
-
-
-
-# calculate distance to bazaar
-
-
-# calculate distance to local shop
-
-
-
+# remove variables
+facilities <- facilities %>% select(hh_ID,
+                                    fac_count,
+                                    submissiondate,
+                                    visits_healthcenter,
+                                    visits_bazaar,
+                                    visits_localshop)
 
 ##########
 # if there is a hh_ID duplicate, use the first entry
@@ -521,73 +517,77 @@ facilities$visits_bazaar <- factor(facilities$visits_bazaar)
 facilities$visits_localshop <- factor(facilities$visits_localshop)
 
 # check for duplicates 
-housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+facilities$hh_ID[duplicated(facilities$hh_ID)]
+
+# merge with housing data
+housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
 ```
 
+Not using distance or mode of transportation to facilities because of missing data (only 200/347 visit health centers)
 ```{r}
 # import second facilities dataset
-facilities2 <- `21. Facilities_facility_repeat_level_2.dta`
-
-# clean modes of transportation
-# mode	1	Foot #693
-# mode	2	Bicycle #616
-# mode	3	Rickshaw/Van #472
-# mode	4	Bullock cart #3
-# mode	5	Boat #3
-# mode	6	Engine Boat #3
-# mode	7	Motorcycle #264
-# mode	8	Tempo/Baby Taxi/Nosimon #103
-# mode	9	Bus stop #40
-# mode	10	Train #0
-# mode	11	Other #0
-
-# find totals
-# foot <- sum(grepl("1",facilities2$fac_mode))
-# bicycle <- sum(grepl("2",facilities2$fac_mode))
-# rickshawvan <- sum(grepl("3",facilities2$fac_mode))
-# cart <- sum(grepl("4",facilities2$fac_mode))
-# boat <- sum(grepl("5",facilities2$fac_mode))
-# engine_boat <- sum(grepl("6",facilities2$fac_mode))
-# motorcycle <- sum(grepl("7",facilities2$fac_mode))
-# tempo <- sum(grepl("8",facilities2$fac_mode))
-# bus <- sum(grepl("9",facilities2$fac_mode))
-# train <- sum(grepl("10",facilities2$fac_mode))
-# other <- sum(grepl("11",facilities2$fac_mode))
-
-# reduce number of factor levels for mode of transportation
-facilities2 <- facilities2 %>% mutate(fac_mode = ifelse(grepl("1", fac_mode), "foot",
-                                                 ifelse(grepl("2", fac_mode), "bicycle",
-                                                 ifelse(grepl("3", fac_mode), "rickshaw_van",
-                                                 ifelse(grepl("7", fac_mode), "motorcycle",
-                                                 ifelse(grepl("8", fac_mode), "nosimon",
-                                                 ifelse(grepl("9", fac_mode), "busstop","other")))))))
-
-# convert all units of speed to minutes by foot
-facilities2 <- facilities2 %>% mutate(fac_time_min = ifelse(time_units==1, time_taken*1, 
-                                                    ifelse(time_units==2, time_taken*3,
-                                                    ifelse(time_units==3, time_taken*9,
-                                                    ifelse(time_units==4, time_taken*6,
-                                                    ifelse(time_units==5, time_taken*60,
-                                                    ifelse(time_units==6, time_taken*3*60,
-                                                    ifelse(time_units==7, time_taken*9*60, time_taken*6*60))))))))
-
-# merge facilties dataframes together
-facilities <- merge(facilities, facilities2, by = c("hh_ID","facility_1_ID"))
-
-# drop variables
-facilities <- facilities %>% select(-time_taken, -time_units, -facility_1_ID)
-
-##########
-# factor variables
-##########
-facilities$fac_mode <-factor(facilities$fac_mode)
-  
-# merge with household characteristics
-housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
-str(housing_all)
-
-# check for duplicates 
-housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+# facilities2 <- `21. Facilities_facility_repeat_level_2.dta`
+# 
+# # clean modes of transportation
+# # mode	1	Foot #693
+# # mode	2	Bicycle #616
+# # mode	3	Rickshaw/Van #472
+# # mode	4	Bullock cart #3
+# # mode	5	Boat #3
+# # mode	6	Engine Boat #3
+# # mode	7	Motorcycle #264
+# # mode	8	Tempo/Baby Taxi/Nosimon #103
+# # mode	9	Bus stop #40
+# # mode	10	Train #0
+# # mode	11	Other #0
+# 
+# # find totals
+# # foot <- sum(grepl("1",facilities2$fac_mode))
+# # bicycle <- sum(grepl("2",facilities2$fac_mode))
+# # rickshawvan <- sum(grepl("3",facilities2$fac_mode))
+# # cart <- sum(grepl("4",facilities2$fac_mode))
+# # boat <- sum(grepl("5",facilities2$fac_mode))
+# # engine_boat <- sum(grepl("6",facilities2$fac_mode))
+# # motorcycle <- sum(grepl("7",facilities2$fac_mode))
+# # tempo <- sum(grepl("8",facilities2$fac_mode))
+# # bus <- sum(grepl("9",facilities2$fac_mode))
+# # train <- sum(grepl("10",facilities2$fac_mode))
+# # other <- sum(grepl("11",facilities2$fac_mode))
+# 
+# # reduce number of factor levels for mode of transportation
+# facilities2 <- facilities2 %>% mutate(fac_mode = ifelse(grepl("1", fac_mode), "foot",
+#                                                  ifelse(grepl("2", fac_mode), "bicycle",
+#                                                  ifelse(grepl("3", fac_mode), "rickshaw_van",
+#                                                  ifelse(grepl("7", fac_mode), "motorcycle",
+#                                                  ifelse(grepl("8", fac_mode), "nosimon",
+#                                                  ifelse(grepl("9", fac_mode), "busstop","other")))))))
+# 
+# # convert all units of speed to minutes by foot
+# facilities2 <- facilities2 %>% mutate(fac_time_min = ifelse(time_units==1, time_taken*1, 
+#                                                     ifelse(time_units==2, time_taken*3,
+#                                                     ifelse(time_units==3, time_taken*9,
+#                                                     ifelse(time_units==4, time_taken*6,
+#                                                     ifelse(time_units==5, time_taken*60,
+#                                                     ifelse(time_units==6, time_taken*3*60,
+#                                                     ifelse(time_units==7, time_taken*9*60, time_taken*6*60))))))))
+# 
+# # merge facilties dataframes together
+# facilities <- merge(facilities, facilities2, by = c("hh_ID","facility_1_ID"))
+# 
+# # drop variables
+# facilities <- facilities %>% select(-time_taken, -time_units, -facility_1_ID)
+# 
+# ##########
+# # factor variables
+# ##########
+# facilities$fac_mode <-factor(facilities$fac_mode)
+#   
+# # merge with household characteristics
+# housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
+# str(housing_all)
+# 
+# # check for duplicates 
+# housing_all$hh_ID[duplicated(housing_all$hh_ID)]
 ```
 
 ```{r}
@@ -631,223 +631,272 @@ plots <- plots %>%
                               (plot_type_other==1) ~ "other"))
 plots <- plots %>% select(-plot_type_homestead,-plot_type_cultivable_land_pond,-plot_type_other)
 
-########################
-# who_owns - too many factor levels (change to three types)
-########################
-plots$who_owns_male <- ifelse(grepl("1",plots$who_owns), 1, 0)
-plots$who_owns_family <- ifelse(grepl("2",plots$who_owns), 1, 0)
-temp <- c("3","4","5","6")
-plots$who_owns_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_owns), 1, 0)
+# has a cultivable plot 
+plots <- plots %>% mutate(hasCultivablePlot = ifelse(plot_type == "cultivable",1,0))
+temp <- plots %>% group_by(hh_ID) %>% tally(hasCultivablePlot)
+plots <- merge(plots, temp, by = "hh_ID")
+plots <- plots %>% mutate(totalCultivablePlot = n) %>% select(-n)
 
-plots <- plots %>% 
-  mutate(who_owns = case_when((who_owns_male==1) ~ "male",
-                              (who_owns_family==1) ~ "family",
-                              (who_owns_other==1) ~ "other"))
-plots <- plots %>% select(-who_owns_male,-who_owns_family,-who_owns_other)
+# operational status
+# cur_opr	1	Fallow
+# cur_opr	2	Own operated
+# cur_opr	3	Rented/leased in/cash
+# cur_opr	4	Rented/leased in/crop share
+# cur_opr	5	Mortgaged in
+# cur_opr	6	Rented/leased out/cash
+# cur_opr	7	Rented/leased out/crop share
+# cur_opr	8	Mortgage out
+# cur_opr	9	Group leased in with other farmer
+# cur_opr	10	Leased out to NGO
+# cur_opr	11	Taken from joint owner
+# cur_opr	12	Jointly with other owners
 
-########################
-# who_owns_off - too many factor levels (change to three types)
-########################
-plots$who_owns_off_male <- ifelse(grepl("1",plots$who_owns_off), 1, 0)
-plots$who_owns_off_family <- ifelse(grepl("2",plots$who_owns_off), 1, 0)
-temp <- c("3","4","5","6")
-plots$who_owns_off_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_owns_off), 1, 0)
+ #  1   2   3   4   5   6   7   8   9  11  12 
+ # 56 354  17   8  21   6   5   9   4   2   1
 
-plots <- plots %>% 
-  mutate(who_owns_off = case_when((who_owns_off_male==1) ~ "male",
-                              (who_owns_off_family==1) ~ "family",
-                              (who_owns_off_other==1) ~ "other"))
-plots <- plots %>% select(-who_owns_off_male,-who_owns_off_family,-who_owns_off_other)
- 
-########################
-# who_decision - too many factor levels (change to three types)
-########################
-plots$who_decision_male <- ifelse(grepl("1",plots$who_decision), 1, 0)
-plots$who_decision_family <- ifelse(grepl("2",plots$who_decision), 1, 0)
-temp <- c("3","4","5","6")
-plots$who_decision_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_decision), 1, 0)
+# owns a plot
+plots <- plots %>% mutate(hasOwnPlot = ifelse(cur_opr_status == 2,1,0))
+temp <- plots %>% group_by(hh_ID) %>% tally(hasOwnPlot)
+plots <- merge(plots, temp, by = "hh_ID")
+plots <- plots %>% mutate(totalOwnPlot = n) %>% select(-n)
 
-plots <- plots %>% 
-  mutate(who_decision = case_when((who_decision_male==1) ~ "male",
-                              (who_decision_family==1) ~ "family",
-                              (who_decision_other==1) ~ "other"))
-plots <- plots %>% select(-who_decision_male,-who_decision_family,-who_decision_other)
+# select variables 
+plots <- plots %>% select(hh_ID, 
+                          totalCultivablePlot,
+                          totalOwnPlot)
 
-########################
-# who_responsible - not enough responses, didn't include
-########################
+# remove duplicates
+plots <- distinct(plots, hh_ID, .keep_all= TRUE)
+plots$hh_ID[duplicated(plots$hh_ID)]
+head(plots)
 
-########################
-# who_dec_spd - too many factor levels (change to three types)
-########################
-plots$who_dec_spd_male <- ifelse(grepl("1",plots$who_dec_spd), 1, 0)
-plots$who_dec_spd_family <- ifelse(grepl("2",plots$who_dec_spd), 1, 0)
-temp <- c("3","4","5","6")
-plots$who_dec_spd_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_dec_spd), 1, 0)
+# merge with housing
+housing_all <- merge(housing_all, plots, by="hh_ID")
 
-plots <- plots %>% 
-  mutate(who_dec_spd = case_when((who_dec_spd_male==1) ~ "male",
-                              (who_dec_spd_family==1) ~ "family",
-                              (who_dec_spd_other==1) ~ "other"))
-plots <- plots %>% select(-who_dec_spd_male,-who_dec_spd_family,-who_dec_spd_other)
+#########################################################
+# FINAL DATAFRAME
+#########################################################
+# merge with respondent info
+final_df <- merge(housing_all, hh_respondent, by="hh_ID")
+names(final_df)
+```
 
-########################
-# who_infra - too many factor levels (change to three types)
-########################
-plots$who_infra_male <- ifelse(grepl("1",plots$who_infra), 1, 0)
-plots$who_infra_family <- ifelse(grepl("2",plots$who_infra), 1, 0)
-temp <- c("3","4","5","6")
-plots$who_infra_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_infra), 1, 0)
-
-plots <- plots %>% 
-  mutate(who_infra = case_when((who_infra_male==1) ~ "male",
-                              (who_infra_family==1) ~ "family",
-                              (who_infra_other==1) ~ "other"))
-plots <- plots %>% select(-who_infra_male,-who_infra_family,-who_infra_other)
-
-########################
-# cur_opr_status - too many factor levels (change to three types)
-########################
-plots$cur_opr_status_fallow <- ifelse(grepl("1",plots$cur_opr_status), 1, 0)
-plots$cur_opr_status_own <- ifelse(grepl("2",plots$cur_opr_status), 1, 0)
-temp <- c("3","4","5","6","7","8","9","11")
-plots$cur_opr_status_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$cur_opr_status), 1, 0)
-
-plots <- plots %>% 
-  mutate(cur_opr_status = case_when((cur_opr_status_fallow==1) ~ "fallow",
-                              (cur_opr_status_own==1) ~ "own",
-                              (cur_opr_status_other==1) ~ "other"))
-plots <- plots %>% select(-cur_opr_status_fallow,-cur_opr_status_own,-cur_opr_status_other)
-
-########################
-# how_acq  - too many factor levels (change to three types)
-########################
-plots$how_acq_bought <- ifelse(grepl("1",plots$how_acq), 1, 0)
-plots$how_acq_inherited <- ifelse(grepl("2",plots$how_acq), 1, 0)
-temp <- c("3","4","5","6")
-plots$how_acq_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$how_acq), 1, 0)
-
-plots <- plots %>% 
-  mutate(how_acq = case_when((how_acq_bought==1) ~ "bought",
-                              (how_acq_inherited==1) ~ "inherited",
-                              (how_acq_other==1) ~ "other"))
-plots <- plots %>% select(-how_acq_bought,-how_acq_inherited,-how_acq_other)
-
-########################
-# plot_use  - too many factor levels (change to four types)
-########################
-plots$plot_use_agriculture <- ifelse(grepl("1",plots$plot_use), 1, 0)
-plots$plot_use_fisheries <- ifelse(grepl("2",plots$plot_use), 1, 0)
-plots$plot_use_livestock <- ifelse(grepl("2",plots$plot_use), 1, 0)
-temp <- c("3","4","5","6","7","99")
-plots$plot_use_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$plot_use), 1, 0)
-
-plots <- plots %>% 
-  mutate(plot_use = case_when((plot_use_agriculture==1) ~ "agriculture",
-                              (plot_use_fisheries==1) ~ "fisheries",
-                              (plot_use_other==1) ~ "other",
-                              (plot_use_livestock==1) ~ "livestock"))
-plots <- plots %>% select(-plot_use_agriculture,-plot_use_fisheries,-plot_use_livestock,-plot_use_other)
-
-###############################
-# flood depth
-# $flood_depth
-# [1] 0
+Don't need info below for now. Information by specific plot. 
+```{r}
+# ########################
+# # who_owns - too many factor levels (change to three types)
+# ########################
+# plots$who_owns_male <- ifelse(grepl("1",plots$who_owns), 1, 0)
+# plots$who_owns_family <- ifelse(grepl("2",plots$who_owns), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$who_owns_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_owns), 1, 0)
 # 
-# $flood_unit
-# [1] 175
-# too many missing 
-
-##########
-# if there is a hh_ID duplicate, use the first entry
-##########
-# 100+ duplicates
-plots$hh_ID[duplicated(plots$hh_ID)]
-plots$submissiondate <- as.Date(plots$submissiondate, "%b %d, %Y")
-plots <- setDT(plots)[plots[, .I[which.min(submissiondate)], by=hh_ID]$V1]
-plots <- plots %>% select(-submissiondate)
-##########
-
-# select final variables
-
-plots <- plots %>% select(hh_ID,
-                          size_plot,
-                          dis_from_home,
-                          soil_type,
-                          plot_age,
-                          plot_type,
-                          plot_use,
-                          who_owns,
-                          who_owns_off,
-                          who_decision,
-                          who_dec_spd,
-                          who_infra,
-                          cur_opr_status,
-                          cur_mv,
-                          how_acq)
-
-##########
-# factor variables
-##########
-plots$soil_type <- factor(plots$soil_type)
-plots$plot_type <- factor(plots$plot_type)
-plots$plots$plot_use <- factor(plots$plots$plot_use)
-plots$who_owns <- factor(plots$who_owns)
-plots$who_owns_off <- factor(plots$who_owns_off)
-plots$who_decision <- factor(plots$who_decision)
-plots$who_dec_spd <- factor(plots$who_dec_spd)
-plots$who_infra <- factor(plots$who_infra)
-plots$cur_opr_status <- factor(plots$cur_opr_status)
-plots$how_acq <- factor(plots$how_acq)
-
-# check for NAs
-# map(plots, ~sum(is.na(.)))
-
-# no duplicates
-plots$hh_ID[duplicated(plots$hh_ID)]
+# plots <- plots %>% 
+#   mutate(who_owns = case_when((who_owns_male==1) ~ "male",
+#                               (who_owns_family==1) ~ "family",
+#                               (who_owns_other==1) ~ "other"))
+# plots <- plots %>% select(-who_owns_male,-who_owns_family,-who_owns_other)
+# 
+# ########################
+# # who_owns_off - too many factor levels (change to three types)
+# ########################
+# plots$who_owns_off_male <- ifelse(grepl("1",plots$who_owns_off), 1, 0)
+# plots$who_owns_off_family <- ifelse(grepl("2",plots$who_owns_off), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$who_owns_off_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_owns_off), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(who_owns_off = case_when((who_owns_off_male==1) ~ "male",
+#                               (who_owns_off_family==1) ~ "family",
+#                               (who_owns_off_other==1) ~ "other"))
+# plots <- plots %>% select(-who_owns_off_male,-who_owns_off_family,-who_owns_off_other)
+#  
+# ########################
+# # who_decision - too many factor levels (change to three types)
+# ########################
+# plots$who_decision_male <- ifelse(grepl("1",plots$who_decision), 1, 0)
+# plots$who_decision_family <- ifelse(grepl("2",plots$who_decision), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$who_decision_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_decision), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(who_decision = case_when((who_decision_male==1) ~ "male",
+#                               (who_decision_family==1) ~ "family",
+#                               (who_decision_other==1) ~ "other"))
+# plots <- plots %>% select(-who_decision_male,-who_decision_family,-who_decision_other)
+# 
+# ########################
+# # who_responsible - not enough responses, didn't include
+# ########################
+# 
+# ########################
+# # who_dec_spd - too many factor levels (change to three types)
+# ########################
+# plots$who_dec_spd_male <- ifelse(grepl("1",plots$who_dec_spd), 1, 0)
+# plots$who_dec_spd_family <- ifelse(grepl("2",plots$who_dec_spd), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$who_dec_spd_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_dec_spd), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(who_dec_spd = case_when((who_dec_spd_male==1) ~ "male",
+#                               (who_dec_spd_family==1) ~ "family",
+#                               (who_dec_spd_other==1) ~ "other"))
+# plots <- plots %>% select(-who_dec_spd_male,-who_dec_spd_family,-who_dec_spd_other)
+# 
+# ########################
+# # who_infra - too many factor levels (change to three types)
+# ########################
+# plots$who_infra_male <- ifelse(grepl("1",plots$who_infra), 1, 0)
+# plots$who_infra_family <- ifelse(grepl("2",plots$who_infra), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$who_infra_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_infra), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(who_infra = case_when((who_infra_male==1) ~ "male",
+#                               (who_infra_family==1) ~ "family",
+#                               (who_infra_other==1) ~ "other"))
+# plots <- plots %>% select(-who_infra_male,-who_infra_family,-who_infra_other)
+# 
+# ########################
+# # cur_opr_status - too many factor levels (change to three types)
+# ########################
+# plots$cur_opr_status_fallow <- ifelse(grepl("1",plots$cur_opr_status), 1, 0)
+# plots$cur_opr_status_own <- ifelse(grepl("2",plots$cur_opr_status), 1, 0)
+# temp <- c("3","4","5","6","7","8","9","11")
+# plots$cur_opr_status_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$cur_opr_status), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(cur_opr_status = case_when((cur_opr_status_fallow==1) ~ "fallow",
+#                               (cur_opr_status_own==1) ~ "own",
+#                               (cur_opr_status_other==1) ~ "other"))
+# plots <- plots %>% select(-cur_opr_status_fallow,-cur_opr_status_own,-cur_opr_status_other)
+# 
+# ########################
+# # how_acq  - too many factor levels (change to three types)
+# ########################
+# plots$how_acq_bought <- ifelse(grepl("1",plots$how_acq), 1, 0)
+# plots$how_acq_inherited <- ifelse(grepl("2",plots$how_acq), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$how_acq_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$how_acq), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(how_acq = case_when((how_acq_bought==1) ~ "bought",
+#                               (how_acq_inherited==1) ~ "inherited",
+#                               (how_acq_other==1) ~ "other"))
+# plots <- plots %>% select(-how_acq_bought,-how_acq_inherited,-how_acq_other)
+# 
+# ########################
+# # plot_use  - too many factor levels (change to four types)
+# ########################
+# plots$plot_use_agriculture <- ifelse(grepl("1",plots$plot_use), 1, 0)
+# plots$plot_use_fisheries <- ifelse(grepl("2",plots$plot_use), 1, 0)
+# plots$plot_use_livestock <- ifelse(grepl("2",plots$plot_use), 1, 0)
+# temp <- c("3","4","5","6","7","99")
+# plots$plot_use_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$plot_use), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(plot_use = case_when((plot_use_agriculture==1) ~ "agriculture",
+#                               (plot_use_fisheries==1) ~ "fisheries",
+#                               (plot_use_other==1) ~ "other",
+#                               (plot_use_livestock==1) ~ "livestock"))
+# plots <- plots %>% select(-plot_use_agriculture,-plot_use_fisheries,-plot_use_livestock,-plot_use_other)
+# 
+# ###############################
+# # flood depth
+# # $flood_depth
+# # [1] 0
+# # 
+# # $flood_unit
+# # [1] 175
+# # too many missing 
+# 
+# ##########
+# # if there is a hh_ID duplicate, use the first entry
+# ##########
+# # 100+ duplicates
+# plots$hh_ID[duplicated(plots$hh_ID)]
+# plots$submissiondate <- as.Date(plots$submissiondate, "%b %d, %Y")
+# plots <- setDT(plots)[plots[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+# plots <- plots %>% select(-submissiondate)
+# ##########
+# 
+# # select final variables
+# 
+# plots <- plots %>% select(hh_ID,
+#                           size_plot,
+#                           dis_from_home,
+#                           soil_type,
+#                           plot_age,
+#                           plot_type,
+#                           plot_use,
+#                           who_owns,
+#                           who_owns_off,
+#                           who_decision,
+#                           who_dec_spd,
+#                           who_infra,
+#                           cur_opr_status,
+#                           cur_mv,
+#                           how_acq)
+# 
+# ##########
+# # factor variables
+# ##########
+# plots$soil_type <- factor(plots$soil_type)
+# plots$plot_type <- factor(plots$plot_type)
+# plots$plots$plot_use <- factor(plots$plots$plot_use)
+# plots$who_owns <- factor(plots$who_owns)
+# plots$who_owns_off <- factor(plots$who_owns_off)
+# plots$who_decision <- factor(plots$who_decision)
+# plots$who_dec_spd <- factor(plots$who_dec_spd)
+# plots$who_infra <- factor(plots$who_infra)
+# plots$cur_opr_status <- factor(plots$cur_opr_status)
+# plots$how_acq <- factor(plots$how_acq)
+# 
+# # check for NAs
+# # map(plots, ~sum(is.na(.)))
+# 
+# # no duplicates
+# plots$hh_ID[duplicated(plots$hh_ID)]
 ```
 
 ```{r}
-# merge with household characteristics
-housing_all <- merge(plots, housing_all, by = c("hh_ID"))
-housing_all$hh_ID[duplicated(housing_all$hh_ID)]
-# str(housing_all)
-# map(plots, ~sum(is.na(.)))
-```
+str(housing_all)
 
-```{r}
-# merge datasets
-hh_data <- merge(housing_all, hh_char, by = "hh_ID")
-str(hh_data)
-#hh_data$hh_ID[duplicated(hh_data$hh_ID)]
+
 
 #########################################################
 # Separate categorical variables and continuous variables
 #########################################################
-categorical_variables <- hh_data %>% select(-size_plot, 
-                                            -flood_depth, 
-                                            -dis_from_home, 
-                                            -cur_mv, 
-                                            -plot_age, 
-                                            -fac_count,
-                                            -count_latrine, 
-                                            -rent_estimate, 
-                                            -house_age,
-                                            -rent_estimate,
-                                            -house_rooms, 
-                                            -house_rooms_sleeping,
-                                            -house_sharing,
-                                            -house_age, 
-                                            -fuel_cost, 
-                                            -lighting_cost, 
-                                            -cell_cost, 
-                                            -cellphone,
-                                            -fac_count,
-                                            -numChildren,
-                                            -pctCanCarry20L,
-                                            -pctCanWalk5Km,
-                                            -pctCanStandOwn,
-                                            -hh_members)
+categorical_variables <- housing_all %>% select(visits_healthcenter
+                                                visits_bazaar
+                                                visits_localshop    
+                                                business
+                                                use_lat
+                                                main_use_flush
+                                                defecation_public
+                                                housewall_material
+                                                houseroof_material 
+                                                housefloor_material
+                                                house_elec
+                                                water_suppl
+                                                drinking_source_same
+                                                does_water_purify
+                                                garbage_collected
+                                                lighting_source_type
+                                                fuel_source_wood
+                                                totalCultivablePlot
+                                                totalOwnPlot,
+                                                sex
+                                                maritalStatus
+                                                literacy
+                                                education
+                                                attendingCollege
+                                                occupationType
+                                                bmiCategory
+                                                isChild,
+                                                respCanCarry20L,
+                                                respcanWalk5Km,
+                                                respcanStandOwn)
 continuous_variables <- hh_data %>% select(hh_ID,
                                            size_plot, 
                                             flood_depth, 
