@@ -684,7 +684,10 @@ housing_all <- merge(housing_all, plots, by="hh_ID")
 #########################################################
 # merge with respondent info
 final_df <- merge(housing_all, hh_respondent, by="hh_ID")
-names(final_df)
+# remove unnecessary variables
+final_df <- final_df %>% select(-totalCanCarry20L,-totalCanStandOwn,-totalCanWalk5Km)
+
+str(final_df)
 ```
 
 Don't need info below for now. Information by specific plot. 
@@ -865,329 +868,6 @@ Don't need info below for now. Information by specific plot.
 # plots$hh_ID[duplicated(plots$hh_ID)]
 ```
 
-```{r}
-# check data types
-str(final_df)
-
-#########################################################
-# Separate categorical variables and continuous variables
-#########################################################
-categorical_variables <- final_df %>% select(hh_ID,
-                                             visits_healthcenter,
-                                                visits_bazaar,
-                                                visits_localshop,
-                                                business,
-                                                use_lat,
-                                                main_use_flush,
-                                                defecation_public,
-                                                housewall_material,
-                                                houseroof_material,
-                                                housefloor_material,
-                                                house_elec,
-                                                water_supply,
-                                                drinking_source_same,
-                                                does_water_purify,
-                                                garbage_collected,
-                                                lighting_source_type,
-                                                fuel_source_wood,
-                                                totalCultivablePlot,
-                                                totalOwnPlot,
-                                                sex,
-                                                maritalStatus,
-                                                literacy,
-                                                education,
-                                                attendingCollege,
-                                                occupationType,
-                                                bmiCategory,
-                                                isChild,
-                                                canCarry20L,
-                                                canWalk5Km,
-                                                canStandOwn)
-
-continuous_variables <- final_df %>% select(-visits_healthcenter,
-                                            -visits_bazaar,
-                                            -visits_localshop,
-                                            -business,
-                                            -use_lat,
-                                            -main_use_flush,
-                                            -defecation_public,
-                                            -housewall_material,
-                                            -houseroof_material,
-                                            -housefloor_material,
-                                            -house_elec,
-                                            -water_supply,
-                                            -drinking_source_same,
-                                            -does_water_purify,
-                                            -garbage_collected,
-                                            -lighting_source_type,
-                                            -fuel_source_wood,
-                                            -totalCultivablePlot,
-                                            -totalOwnPlot,
-                                            -sex,
-                                            -maritalStatus,
-                                            -literacy,
-                                            -education,
-                                            -attendingCollege,
-                                            -occupationType,
-                                            -bmiCategory,
-                                            -isChild,
-                                            -canCarry20L,
-                                            -canWalk5Km,
-                                            -canStandOwn)
-
-# scale continuous variables
-# scale variables except hh_ID
-continuous_variables1 <- apply(continuous_variables[,2:23], 2, scale)
-# add df back together
-continuous_variables <- data.frame(continuous_variables1,continuous_variables$hh_ID)
-continuous_variables <- continuous_variables %>% mutate(hh_ID = continuous_variables.hh_ID) %>% select(-continuous_variables.hh_ID)
-
-##################################
-# combine continous and categorical into one dataset
-##################################
-
-# merge categorical and continous variables into one dataframe
-pca_data <- merge(categorical_variables, continuous_variables, by ="hh_ID")
-
-# remove NAs
-pca_data_noNAs <- pca_data[complete.cases(pca_data),]
-# # recode dummy frame
-pca_data_noNAs <- dummy.data.frame(pca_data_noNAs)
-# 
-str(pca_data_noNAs)
-
-pca_data_PCAmixdata <- lapply(pca_data_noNAs, as.numeric)
-str(pca_data_PCAmixdata)
-
-pca_data_PCAmixdata <- as.data.frame(pca_data_PCAmixdata)
-pca_data_PCAmixdata <- pca_data_PCAmixdata %>% select(-hh_ID)
-str(pca_data_PCAmixdata)
-```
-
-# PCA
-
-## Figure out dimensions of well-being using Factor Analysis
-
-http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/112-pca-principal-component-analysis-essentials/
-http://www.di.fc.ul.pt/~jpn/r/factoranalysis/factoranalysis.html#factor-analysis-vs.pca
-
-
-```{r}
-res.pca <- PCA(pca_data_PCAmixdata, graph = FALSE)
-print(res.pca)
-```
-
-The eigenvalues measure the amount of variation retained by each principal component. Eigenvalues are large for the first PCs and small for the subsequent PCs. That is, the first PCs corresponds to the directions with the maximum amount of variation in the data set.
-
-Examine the eigenvalues to determine the number of principal components to be considered.
-```{r}
-eig.val <- get_eigenvalue(res.pca)
-eig.val
-```
-
-```{r}
-fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 15))
-```
-
-This function provides a list of matrices containing all the results for the active variables (coordinates, correlation between variables and axes, squared cosine and contributions)
-
-var$coord: coordinates of variables to create a scatter plot
-var$cos2: represents the quality of representation for variables on the factor map. It’s calculated as the squared coordinates: var.cos2 = var.coord * var.coord.
-var$contrib: contains the contributions (in percentage) of the variables to the principal components. The contribution of a variable (var) to a given principal component is (in percentage) : (var.cos2 * 100) / (total cos2 of the component).
-
-```{r}
-var <- get_pca_var(res.pca)
-var
-```
-```{r}
-# Coordinates
-head(var$coord)
-# Cos2: quality on the factore map
-head(var$cos2)
-# Contributions to the principal components
-head(var$contrib)
-```
-```{r fig.width=3, fig.height=3}
-# library("corrplot")
-# corrplot(var$cos2, is.corr=FALSE)
-
-# Total cos2 of variables on Dim.1 and Dim.2
-fviz_cos2(res.pca, choice = "var", axes = 1:2)
-
-# Color by cos2 values: quality on the factor map
-fviz_pca_var(res.pca, col.var = "cos2",
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
-             repel = TRUE # Avoid text overlapping
-             )
-
-# Change the transparency by cos2 values
-# fviz_pca_var(res.pca, alpha.var = "cos2")
-
-# head(var$contrib, 4)
-
-
-# Contributions of variables to PC1
-fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
-
-# Contributions of variables to PC2
-fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
-```
-
-```{r}
-# total contribution to PC1 and PC2 
-fviz_contrib(res.pca, choice = "var", axes = 1:2, top = 10)
-```
-
-The most important (or, contributing) variables can be highlighted on the correlation plot as follow:
-```{r}
-fviz_pca_var(res.pca, col.var = "contrib",
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
-```
-
-*Clustering*
-```{r}
-# Create a grouping variable using kmeans
-# Create 3 groups of variables (centers = 3)
-set.seed(123)
-res.km <- kmeans(var$coord, centers = 3, nstart = 25)
-grp <- as.factor(res.km$cluster)
-# Color variables by groups
-fviz_pca_var(res.pca, col.var = grp, 
-             palette = c("#0073C2FF", "#EFC000FF", "#868686FF"),
-             legend.title = "Cluster")
-```
-
-Identify the most significantly associated variables with a given principal component:
-```{r}
-res.desc <- dimdesc(res.pca, axes = c(1,2), proba = 0.05)
-# Description of dimension 1
-res.desc$Dim.1
-
-# Description of dimension 2
-res.desc$Dim.2
-```
-
-```{r}
-# results, for individuals
-ind <- get_pca_ind(res.pca)
-ind
-# Coordinates of individuals
-head(ind$coord)
-# Quality of individuals
-head(ind$cos2)
-# Contributions of individuals
-head(ind$contrib)
-
-fviz_pca_ind(res.pca, col.ind = "cos2", 
-             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
-             repel = TRUE # Avoid text overlapping (slow if many points)
-             )
-
-fviz_pca_ind(res.pca, pointsize = "cos2", 
-             pointshape = 21, fill = "#E7B800",
-             repel = TRUE # Avoid text overlapping (slow if many points)
-             )
-```
-
-```{r}
-# Total contribution on PC1 and PC2
-fviz_contrib(res.pca, choice = "ind", axes = 1:2)
-```
-
-# PCA: Another way
-
-https://rstudio-pubs-static.s3.amazonaws.com/376139_e9adaefdf4594a79a54a3f87ff4852d6.html
-
-```{r}
-
-ev <- eigen(cor(pca_data_PCAmixdata)) # get eigenvalues
-ap <- parallel(subject=nrow(pca_data_PCAmixdata),var=ncol(pca_data_PCAmixdata), rep=100, cent=.05)
-nS <- nScree(x=ev$values, aparallel=ap$eigen$qevpea)
-plotnScree(nS)
-```
-
-Optimal factor levels = 20.
-Oblique rotation (rotate = “oblimin”) as I believe that there is a correlation in the factors.
-Used `Ordinary Least Squared/Minres` factoring (fm = “minres”), as it is known to provide results similar to `Maximum Likelihood` without assuming a multivariate normal distribution and derives solutions through iterative eigendecomposition like a principal axis.
-```{r}
-factor20 <- fa(pca_data_PCAmixdata,nfactors = 20,rotate = "oblimin",fm="minres")
-print(factor20)
-```
-
-A general rule of thumb is that if the absolute value of the standardized loading is greater than 0.3, the variable is relevant for the particular factor
-
-```{r}
-#  consider the loadings more than 0.3 and not loading on more than one factor
-# negative values are acceptable
-print(factor20$loadings,cutoff = 0.3)
-options(max.print=1000000) # don't let rmd cut off results with max print default
-```
-
-```{r}
-fa.diagram(factor20)
-summary(factor20)
-```
-
-The root mean square of residuals (RMSR) is 0.04. This is acceptable as this value should be closer to 0. 
-
-RMSEA (root mean square error of approximation) index. Its value, 0 shows the good model fit as it’s below 0.05. 
-Tucker-Lewis Index (TLI) is -0.524 – an acceptable value considering it’s over 0.9.[[[not sure about this because it's negative]]]
-
-## Clustering
-
-Assessing clustering tendency:
-
-To assess the clustering tendency, the Hopkins’ statistic and a visual approach can be used. This can be performed using the function get_clust_tendency() [factoextra package], which creates an ordered dissimilarity image (ODI).
-
-Hopkins statistic: If the value of Hopkins statistic is close to 1 (far above 0.5), then we can conclude that the dataset is significantly clusterable.
-Visual approach: The visual approach detects the clustering tendency by counting the number of square shaped dark (or colored) blocks along the diagonal in the ordered dissimilarity image.
-```{r}
-gradient.color <- list(low = "steelblue",  high = "white")
-
-pca_data_PCAmixdata %>%    # Remove column 5 (Species)
-  scale() %>%     # Scale variables
-  get_clust_tendency(n = 50, gradient = gradient.color)
-```
-
-Cluster of households can be seen in the top right corner.
-
-```{r}
-# Optimal number of clusters
-library("NbClust")
-library(factoextra)
-res.nbclust <- pca_data_PCAmixdata %>%
-  scale() %>%
-  NbClust(distance = "euclidean",
-          min.nc = 2, max.nc = 10, 
-          method = "complete", index ="all") 
-fviz_nbclust(res.nbclust, ggtheme = theme_minimal())
-```
-
-
-```{r}
-# Optimal number of clusters for k-means
-my_data <- scale(pca_data_PCAmixdata)
-fviz_nbclust(my_data, kmeans, method = "gap_stat")
-```
-```{r}
-# Compute k-means
-set.seed(123)
-km.res <- kmeans(scale(pca_data_PCAmixdata), 3, nstart = 25)
-
-# Visualize
-fviz_cluster(km.res, data = pca_data_PCAmixdata,
-             palette = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07"),
-             ggtheme = theme_minimal(),
-             main = "Partitioning Clustering Plot"
-             )
-```
-
-
-
-
-
-
-
 # Food Diary
 ```{r}
 
@@ -1256,7 +936,7 @@ fooddiary_all <- fooddiary_all[complete.cases(fooddiary_all),]
 
 ```{r}
 # food names
-rm(list=(ls()[ls()!="fooddiary_all"])) # remove everything from environment except fooddiary_all
+#rm(list=(ls()[ls()!="fooddiary_all"])) # remove everything from environment except fooddiary_all
 food_list <- read_csv("Datasets/food_list.csv")
 food_calories <- read_csv("Datasets/food_cal.csv")
 food_calories <- food_calories %>% mutate(food_name = food_type)  %>% 
@@ -1604,15 +1284,62 @@ fooddiary_count <- fooddiary_count %>% mutate(calories_total_grams = case_when(f
 
 ```
 
-
-
-## For now using data excluding the "counts". Data is too messy.
-
 ```{r}
-# all records without unit = 8 (counts)
-fooddiary_nocounts <- fooddiary_cleaned %>% filter(food_type_unit != 8) %>% filter(recall=="week")
-
+# # all records without unit = 8 (counts)
+# fooddiary_nocounts <- fooddiary_cleaned %>% filter(food_type_unit != 8) %>% filter(recall=="week")
 # 
+# calories <- fooddiary_nocounts %>% group_by(hh_ID) %>% tally(calories_total_grams)
+# food_entries <- fooddiary_nocounts %>% count(hh_ID)
+# temp <- merge(calories, food_entries, by = "hh_ID")
+# temp <- temp %>% mutate(hh_calories_total = n.x, hh_food_entries = n.y) %>% select(-n.x,-n.y)
+# 
+# final_df_food <- merge(final_df, temp, by = "hh_ID")
+# 
+# final_df_food <- final_df_food %>%mutate(avg_calories = hh_calories_total/hh_food_entries) %>% select(-hh_calories_total,-hh_food_entries)
+
+# merge fooddiary_count (unit = 8) and other dataset fooddiary_count
+fooddiary_nocounts <- fooddiary_cleaned %>% filter(food_type_unit != 8)
+fooddiary_all <- rbind(fooddiary_nocounts, fooddiary_count)
+
+# find average calories by household
+calories <- fooddiary_all %>% group_by(hh_ID) %>% tally(calories_total_grams)
+food_entries <- fooddiary_all %>% count(hh_ID)
+temp <- merge(calories, food_entries, by = "hh_ID")
+temp <- temp %>% mutate(hh_calories_total = n.x, hh_food_entries = n.y) %>% select(-n.x,-n.y)
+
+final_df_food <- merge(final_df, temp, by = "hh_ID")
+
+final_df_food <- final_df_food %>%mutate(avg_calories = hh_calories_total/hh_food_entries) %>% select(-hh_calories_total,-hh_food_entries)
+
+# find average calories by household member
+final_df_food <- final_df_food %>%mutate(avg_calories_member = avg_calories/hh_members)
+
+summary(final_df_food$avg_calories_member)
+
+############################################
+# Identify and remove outliers
+############################################
+
+# Calculate Z score
+# Z <- outliers(final_df_food$avg_calories_member) 
+#  
+# # Show number of extreme outliers using Z-score
+# length(Z[Z > 9.9])
+#  
+# # Remove extreme outliers 
+# x <- x[-which(Z > 9.9)]
+
+Q <- quantile(final_df_food$avg_calories_member, probs=c(.25, .75), na.rm = FALSE)
+iqr <- IQR(final_df_food$avg_calories_member)
+up <-  Q[2]+1.5*iqr # Upper Range  
+low<- Q[1]-1.5*iqr # Lower Range
+
+############################################
+# Final data without calorie outliers
+############################################
+
+final_df_no_outliers <- subset(final_df_food, final_df_food$avg_calories_member > (Q[1] - 1.5*iqr) & final_df_food$avg_calories_member < (Q[2]+1.5*iqr))
+summary(final_df_no_outliers$avg_calories_member)
 ```
 
 
@@ -1653,6 +1380,7 @@ p1 + theme(axis.text.x = element_text(angle = 60, hjust = 1))
 ```
 
 Look for Ramadan and Manga
+
 ```{r fig2, fig.height = 3.5, fig.width = 3.5}
 # fooddiary_cleaned <- fooddiary_cleaned %>% mutate(calories_total_kg = calories_total_grams/1000)
 
@@ -1665,6 +1393,332 @@ xyplot(
   scales = "free"                 # Make panels axis scales independent
   )
 ```
+
+
+
+
+# PCA
+
+```{r}
+# check data types
+str(final_df)
+
+#########################################################
+# Separate categorical variables and continuous variables
+#########################################################
+categorical_variables <- final_df %>% select(hh_ID,
+                                             visits_healthcenter,
+                                                visits_bazaar,
+                                                visits_localshop,
+                                                business,
+                                                use_lat,
+                                                main_use_flush,
+                                                defecation_public,
+                                                housewall_material,
+                                                houseroof_material,
+                                                housefloor_material,
+                                                house_elec,
+                                                water_supply,
+                                                drinking_source_same,
+                                                does_water_purify,
+                                                garbage_collected,
+                                                lighting_source_type,
+                                                fuel_source_wood,
+                                                totalCultivablePlot,
+                                                totalOwnPlot,
+                                                sex,
+                                                maritalStatus,
+                                                literacy,
+                                                education,
+                                                attendingCollege,
+                                                occupationType,
+                                                bmiCategory,
+                                                isChild,
+                                                canCarry20L,
+                                                canWalk5Km,
+                                                canStandOwn)
+
+continuous_variables <- final_df %>% select(-visits_healthcenter,
+                                            -visits_bazaar,
+                                            -visits_localshop,
+                                            -business,
+                                            -use_lat,
+                                            -main_use_flush,
+                                            -defecation_public,
+                                            -housewall_material,
+                                            -houseroof_material,
+                                            -housefloor_material,
+                                            -house_elec,
+                                            -water_supply,
+                                            -drinking_source_same,
+                                            -does_water_purify,
+                                            -garbage_collected,
+                                            -lighting_source_type,
+                                            -fuel_source_wood,
+                                            -totalCultivablePlot,
+                                            -totalOwnPlot,
+                                            -sex,
+                                            -maritalStatus,
+                                            -literacy,
+                                            -education,
+                                            -attendingCollege,
+                                            -occupationType,
+                                            -bmiCategory,
+                                            -isChild,
+                                            -canCarry20L,
+                                            -canWalk5Km,
+                                            -canStandOwn)
+
+# scale continuous variables
+# scale variables except hh_ID
+continuous_variables1 <- apply(continuous_variables[,2:23], 2, scale)
+# add df back together
+continuous_variables <- data.frame(continuous_variables1,continuous_variables$hh_ID)
+continuous_variables <- continuous_variables %>% mutate(hh_ID = continuous_variables.hh_ID) %>% select(-continuous_variables.hh_ID)
+
+##################################
+# combine continous and categorical into one dataset
+##################################
+
+# merge categorical and continous variables into one dataframe
+pca_data <- merge(categorical_variables, continuous_variables, by ="hh_ID")
+
+# remove NAs
+pca_data_noNAs <- pca_data[complete.cases(pca_data),]
+# # recode dummy frame
+pca_data_noNAs <- dummy.data.frame(pca_data_noNAs)
+# 
+str(pca_data_noNAs)
+
+pca_data_PCAmixdata <- lapply(pca_data_noNAs, as.numeric)
+str(pca_data_PCAmixdata)
+
+pca_data_PCAmixdata <- as.data.frame(pca_data_PCAmixdata)
+pca_data_PCAmixdata <- pca_data_PCAmixdata %>% select(-hh_ID)
+str(pca_data_PCAmixdata)
+```
+
+## Figure out dimensions of well-being using Factor Analysis
+
+http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/112-pca-principal-component-analysis-essentials/
+http://www.di.fc.ul.pt/~jpn/r/factoranalysis/factoranalysis.html#factor-analysis-vs.pca
+
+
+```{r}
+# remove variables
+pca_data_PCAmixdata <- pca_data_PCAmixdata %>% select(-totalCanStandOwn,-totalCanWalk5Km,-totalCanCarry20L,-bmi)
+
+res.pca <- PCA(pca_data_PCAmixdata, graph = FALSE)
+print(res.pca)
+```
+
+The eigenvalues measure the amount of variation retained by each principal component. Eigenvalues are large for the first PCs and small for the subsequent PCs. That is, the first PCs corresponds to the directions with the maximum amount of variation in the data set.
+
+Examine the eigenvalues to determine the number of principal components to be considered.
+```{r}
+eig.val <- get_eigenvalue(res.pca)
+eig.val
+```
+
+```{r}
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 15))
+```
+
+This function provides a list of matrices containing all the results for the active variables (coordinates, correlation between variables and axes, squared cosine and contributions)
+
+var$coord: coordinates of variables to create a scatter plot
+var$cos2: represents the quality of representation for variables on the factor map. It’s calculated as the squared coordinates: var.cos2 = var.coord * var.coord.
+var$contrib: contains the contributions (in percentage) of the variables to the principal components. The contribution of a variable (var) to a given principal component is (in percentage) : (var.cos2 * 100) / (total cos2 of the component).
+
+```{r}
+var <- get_pca_var(res.pca)
+var
+```
+```{r}
+# Coordinates
+head(var$coord)
+# Cos2: quality on the factore map
+head(var$cos2)
+# Contributions to the principal components
+head(var$contrib)
+```
+```{r}
+# library("corrplot")
+# corrplot(var$cos2, is.corr=FALSE)
+
+# Total cos2 of variables on Dim.1 and Dim.2
+fviz_cos2(res.pca, choice = "var", axes = 1:2)
+
+# Color by cos2 values: quality on the factor map
+fviz_pca_var(res.pca, col.var = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = TRUE # Avoid text overlapping
+             )
+
+# Change the transparency by cos2 values
+# fviz_pca_var(res.pca, alpha.var = "cos2")
+
+# head(var$contrib, 4)
+
+
+# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 10)
+
+# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 10)
+```
+
+```{r}
+# total contribution to PC1 and PC2 
+fviz_contrib(res.pca, choice = "var", axes = 1:2, top = 10)
+```
+
+The most important (or, contributing) variables can be highlighted on the correlation plot as follow:
+```{r}
+fviz_pca_var(res.pca, col.var = "contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
+```
+
+*Clustering*
+```{r}
+# Create a grouping variable using kmeans
+# Create 3 groups of variables (centers = 3)
+set.seed(123)
+res.km <- kmeans(var$coord, centers = 3, nstart = 25)
+grp <- as.factor(res.km$cluster)
+# Color variables by groups
+fviz_pca_var(res.pca, col.var = grp, 
+             palette = c("#0073C2FF", "#EFC000FF", "#868686FF"),
+             legend.title = "Cluster")
+```
+
+Identify the most significantly associated variables with a given principal component:
+```{r}
+res.desc <- dimdesc(res.pca, axes = c(1,2), proba = 0.05)
+# Description of dimension 1
+res.desc$Dim.1
+
+# Description of dimension 2
+res.desc$Dim.2
+```
+
+```{r}
+# results, for individuals
+ind <- get_pca_ind(res.pca)
+ind
+# Coordinates of individuals
+head(ind$coord)
+# Quality of individuals
+head(ind$cos2)
+# Contributions of individuals
+head(ind$contrib)
+
+fviz_pca_ind(res.pca, col.ind = "cos2", 
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE # Avoid text overlapping (slow if many points)
+             )
+
+fviz_pca_ind(res.pca, pointsize = "cos2", 
+             pointshape = 21, fill = "#E7B800",
+             repel = TRUE # Avoid text overlapping (slow if many points)
+             )
+```
+
+```{r}
+# Total contribution on PC1 and PC2
+fviz_contrib(res.pca, choice = "ind", axes = 1:2)
+```
+
+## PCA: Another way
+
+https://rstudio-pubs-static.s3.amazonaws.com/376139_e9adaefdf4594a79a54a3f87ff4852d6.html
+
+```{r}
+
+ev <- eigen(cor(pca_data_PCAmixdata)) # get eigenvalues
+ap <- parallel(subject=nrow(pca_data_PCAmixdata),var=ncol(pca_data_PCAmixdata), rep=100, cent=.05)
+nS <- nScree(x=ev$values, aparallel=ap$eigen$qevpea)
+plotnScree(nS)
+```
+
+Optimal factor levels = 20.
+Oblique rotation (rotate = “oblimin”) as I believe that there is a correlation in the factors.
+Used `Ordinary Least Squared/Minres` factoring (fm = “minres”), as it is known to provide results similar to `Maximum Likelihood` without assuming a multivariate normal distribution and derives solutions through iterative eigendecomposition like a principal axis.
+```{r}
+factor20 <- fa(pca_data_PCAmixdata,nfactors = 20,rotate = "oblimin",fm="minres")
+print(factor20)
+```
+
+A general rule of thumb is that if the absolute value of the standardized loading is greater than 0.3, the variable is relevant for the particular factor
+
+```{r}
+#  consider the loadings more than 0.3 and not loading on more than one factor
+# negative values are acceptable
+print(factor20$loadings,cutoff = 0.4)
+options(max.print=1000000) # don't let rmd cut off results with max print default
+```
+
+```{r}
+fa.diagram(factor20)
+summary(factor20)
+```
+
+The root mean square of residuals (RMSR) is 0.04. This is acceptable as this value should be closer to 0. 
+
+RMSEA (root mean square error of approximation) index. Its value, 0 shows the good model fit as it’s below 0.05. 
+Tucker-Lewis Index (TLI) is -0.524 – an acceptable value considering it’s over 0.9.[[[not sure about this because it's negative]]]
+
+## Clustering
+
+Assessing clustering tendency:
+
+To assess the clustering tendency, the Hopkins’ statistic and a visual approach can be used. This can be performed using the function get_clust_tendency() [factoextra package], which creates an ordered dissimilarity image (ODI).
+
+Hopkins statistic: If the value of Hopkins statistic is close to 1 (far above 0.5), then we can conclude that the dataset is significantly clusterable.
+Visual approach: The visual approach detects the clustering tendency by counting the number of square shaped dark (or colored) blocks along the diagonal in the ordered dissimilarity image.
+```{r}
+gradient.color <- list(low = "steelblue",  high = "white")
+
+pca_data_PCAmixdata %>%    # Remove column 5 (Species)
+  scale() %>%     # Scale variables
+  get_clust_tendency(n = 50, gradient = gradient.color)
+```
+
+Cluster of households can be seen in the top right corner.
+
+```{r}
+# Optimal number of clusters
+library("NbClust")
+library(factoextra)
+res.nbclust <- pca_data_PCAmixdata %>%
+  scale() %>%
+  NbClust(distance = "euclidean",
+          min.nc = 2, max.nc = 10, 
+          method = "complete", index ="all") 
+fviz_nbclust(res.nbclust, ggtheme = theme_minimal())
+```
+
+
+```{r}
+# Optimal number of clusters for k-means
+my_data <- scale(pca_data_PCAmixdata)
+fviz_nbclust(my_data, kmeans, method = "gap_stat")
+```
+```{r}
+# Compute k-means
+set.seed(123)
+km.res <- kmeans(scale(pca_data_PCAmixdata), 3, nstart = 25)
+
+# Visualize
+fviz_cluster(km.res, data = pca_data_PCAmixdata,
+             palette = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07"),
+             ggtheme = theme_minimal(),
+             main = "Partitioning Clustering Plot"
+             )
+```
+
+
+
 
 
 
