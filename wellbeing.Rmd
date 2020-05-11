@@ -824,69 +824,9 @@ final_df <- final_df %>% select(-totalCanCarry20L,-totalCanStandOwn,-totalCanWal
 
 # remove missing values
 final_df <- final_df[complete.cases(final_df),]
+###############################################################################################################
 
-df <- final_df
-
-# reorder variables
-df <- df %>% select(hh_ID,
-                                          visits_healthcenter,
-                                          visits_bazaar,
-                                          visits_localshop,
-                                          business,
-                                          use_lat,
-                                          main_use_flush,
-                                          defecation_public,
-                                          house_sharing,
-                                          housewall_material,
-                                          houseroof_material,
-                                          housefloor_material,
-                                          house_elec,
-                                          water_supply,
-                                          drinking_source_same,
-                                          does_water_purify,
-                                          garbage_collected,
-                                          lighting_source_type,
-                                          fuel_source_wood,
-                                          sex,
-                                          maritalStatus,
-                                          literacy,
-                                          education,
-                                          attendingCollege,
-                                          occupationType,
-                                          canCarry20L,
-                                          canWalk5Km,
-                                          canStandOwn,
-                                          bmiCategory,
-                                          isChild,
-                                            satisfaction,
-                                            age,
-                                            bmi,
-                                            numChildren,
-                                            hh_members,
-                                            house_age,
-                                            rent_estimate,
-                                            count_latrine,
-                                            house_rooms,
-                                            house_rooms_sleeping,
-                                            fuel_cost,
-                                            lighting_cost,
-                                            cellphone,
-                                            cell_cost,
-                                            fac_count,
-                                            pctUnderweight,
-                                            pctCanCarry20L,
-                                            pctCanWalk5Km,
-                                            pctCanStandOwn,
-                                            totalCultivablePlot,
-                                            totalOwnPlot)
-
-# scale data
-df <- df %>% select(-hh_ID)
-scale2 <- function(x, na.rm = FALSE) (x - mean(x, na.rm = na.rm)) / sd(x, na.rm)
-df <- df %>% mutate_if(is.numeric, scale2, na.rm = TRUE)
-##################################################################################################################
-
-##################################################################################################################
+###############################################################################################################
 ```
 
 
@@ -1408,7 +1348,7 @@ food_entries <- fooddiary_all %>% count(hh_ID)
 temp <- merge(calories, food_entries, by = "hh_ID")
 temp <- temp %>% mutate(hh_calories_total = n.x, hh_food_entries = n.y) %>% select(-n.x,-n.y)
 
-final_df_food <- merge(df, temp, by = "hh_ID")
+final_df_food <- merge(final_df, temp, by = "hh_ID")
 
 final_df_food <- final_df_food %>%mutate(avg_calories = hh_calories_total/hh_food_entries) %>% select(-hh_calories_total,-hh_food_entries)
 
@@ -1419,6 +1359,70 @@ final_df_food <- final_df_food %>%mutate(avg_calories_member = avg_calories/hh_m
 final_df_food <- final_df_food %>% select(-avg_calories)
 
 summary(final_df_food$avg_calories_member)
+```
+
+# Scale Data
+```{r}
+df <- final_df
+
+# reorder variables
+df <- df %>% select(hh_ID,
+                                          visits_healthcenter,
+                                          visits_bazaar,
+                                          visits_localshop,
+                                          business,
+                                          use_lat,
+                                          main_use_flush,
+                                          defecation_public,
+                                          house_sharing,
+                                          housewall_material,
+                                          houseroof_material,
+                                          housefloor_material,
+                                          house_elec,
+                                          water_supply,
+                                          drinking_source_same,
+                                          does_water_purify,
+                                          garbage_collected,
+                                          lighting_source_type,
+                                          fuel_source_wood,
+                                          sex,
+                                          maritalStatus,
+                                          literacy,
+                                          education,
+                                          attendingCollege,
+                                          occupationType,
+                                          canCarry20L,
+                                          canWalk5Km,
+                                          canStandOwn,
+                                          bmiCategory,
+                                          isChild,
+                                            satisfaction,
+                                            age,
+                                            bmi,
+                                            numChildren,
+                                            hh_members,
+                                            house_age,
+                                            rent_estimate,
+                                            count_latrine,
+                                            house_rooms,
+                                            house_rooms_sleeping,
+                                            fuel_cost,
+                                            lighting_cost,
+                                            cellphone,
+                                            cell_cost,
+                                            fac_count,
+                                            pctUnderweight,
+                                            pctCanCarry20L,
+                                            pctCanWalk5Km,
+                                            pctCanStandOwn,
+                                            totalCultivablePlot,
+                                            totalOwnPlot)
+
+# scale data
+df <- df %>% select(-hh_ID)
+scale2 <- function(x, na.rm = FALSE) (x - mean(x, na.rm = na.rm)) / sd(x, na.rm)
+df <- df %>% mutate_if(is.numeric, scale2, na.rm = TRUE)
+head(df)
 ```
 
 # PCA
@@ -1659,13 +1663,11 @@ fviz_cluster(km.res, data = pca_data,
 ```
 
 
+
 # Lasso and Ridge Regression
-
-
 Using data from df = without food diary information. Data is scaled.
 
 ```{r}
-
 ############################
 # lasso
 ############################
@@ -1679,59 +1681,6 @@ test = df[-index,] # create the test data
 # check dimensions
 dim(train)
 dim(test)
-
-# reorder columns
-train <- train %>% select(hh_ID,
-                                satisfaction,
-                                age,
-                                bmi,
-                                numChildren,
-                                hh_members,
-                                house_age,
-                                rent_estimate,
-                                count_latrine,
-                                house_rooms,
-                                house_rooms_sleeping,
-                                fuel_cost,
-                                lighting_cost,
-                                cellphone,
-                                cell_cost,
-                                fac_count,
-                                pctUnderweight,
-                                pctCanCarry20L,
-                                pctCanWalk5Km,
-                                pctCanStandOwn,
-                                totalCultivablePlot,
-                                totalOwnPlot,
-                                visits_healthcenter,
-                                visits_bazaar,
-                                visits_localshop,
-                                business,
-                                use_lat,
-                                main_use_flush,
-                                defecation_public,
-                                house_sharing,
-                                housewall_material,
-                                houseroof_material,
-                                housefloor_material,
-                                house_elec,
-                                water_supply,
-                                drinking_source_same,
-                                does_water_purify,
-                                garbage_collected,
-                                lighting_source_type,
-                                fuel_source_wood,
-                                sex,
-                                maritalStatus,
-                                literacy,
-                                education,
-                                attendingCollege,
-                                occupationType,
-                                canCarry20L,
-                                canWalk5Km,
-                                canStandOwn,
-                                bmiCategory,
-                                isChild)
 
 # dummy code categorical predictor variables
 x <- model.matrix(satisfaction~., train)[,23:51]
@@ -1835,7 +1784,10 @@ plot(cv.lasso)
 The value of lambda will be chosen by cross-validation. The plot shows cross-validated mean squared error. As lambda decreases, the mean squared error decreases. Ridge includes all the variables in the model and the value of lambda selected is indicated by the vertical lines.
 
 
+
+
 # Lasso Method #2
+
 
 
 # Regression
