@@ -76,12 +76,15 @@ hh_all <- HouseholdComposition_members_level_2.dta %>% mutate(height_meters = to
 # merge with hh_count
 hh_all <- merge(hh_count, hh_all, by=c("hh_ID","member_1_ID"))
 
-# BMI categories
-hh_all <- hh_all %>% mutate(bmi = (weight_kg/(height_meters^2)))
-
 # remove outliers for weight and height
 hh_all <- hh_all %>% filter(tot_height_inch >= 1 & tot_height_inch <= 100)
 hh_all <- hh_all %>% filter(weight_kg >= 1 & weight_kg <= 100)
+
+# bmi
+hh_all <- hh_all %>% mutate(bmi = (weight_kg/(height_meters^2)))
+# remove outliers for bmi
+hh_all <- hh_all %>% filter(bmi < 50)
+
 
 # create BMI categories
 hh_all <- hh_all %>% mutate(bmiCategory = ifelse(bmi >= 30, "obese", 
@@ -526,76 +529,7 @@ facilities$hh_ID[duplicated(facilities$hh_ID)]
 
 # merge with housing data
 housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
-```
 
-Not using distance or mode of transportation to facilities because of missing data (only 200/347 visit health centers)
-```{r}
-# import second facilities dataset
-# facilities2 <- `21. Facilities_facility_repeat_level_2.dta`
-# 
-# # clean modes of transportation
-# # mode	1	Foot #693
-# # mode	2	Bicycle #616
-# # mode	3	Rickshaw/Van #472
-# # mode	4	Bullock cart #3
-# # mode	5	Boat #3
-# # mode	6	Engine Boat #3
-# # mode	7	Motorcycle #264
-# # mode	8	Tempo/Baby Taxi/Nosimon #103
-# # mode	9	Bus stop #40
-# # mode	10	Train #0
-# # mode	11	Other #0
-# 
-# # find totals
-# # foot <- sum(grepl("1",facilities2$fac_mode))
-# # bicycle <- sum(grepl("2",facilities2$fac_mode))
-# # rickshawvan <- sum(grepl("3",facilities2$fac_mode))
-# # cart <- sum(grepl("4",facilities2$fac_mode))
-# # boat <- sum(grepl("5",facilities2$fac_mode))
-# # engine_boat <- sum(grepl("6",facilities2$fac_mode))
-# # motorcycle <- sum(grepl("7",facilities2$fac_mode))
-# # tempo <- sum(grepl("8",facilities2$fac_mode))
-# # bus <- sum(grepl("9",facilities2$fac_mode))
-# # train <- sum(grepl("10",facilities2$fac_mode))
-# # other <- sum(grepl("11",facilities2$fac_mode))
-# 
-# # reduce number of factor levels for mode of transportation
-# facilities2 <- facilities2 %>% mutate(fac_mode = ifelse(grepl("1", fac_mode), "foot",
-#                                                  ifelse(grepl("2", fac_mode), "bicycle",
-#                                                  ifelse(grepl("3", fac_mode), "rickshaw_van",
-#                                                  ifelse(grepl("7", fac_mode), "motorcycle",
-#                                                  ifelse(grepl("8", fac_mode), "nosimon",
-#                                                  ifelse(grepl("9", fac_mode), "busstop","other")))))))
-# 
-# # convert all units of speed to minutes by foot
-# facilities2 <- facilities2 %>% mutate(fac_time_min = ifelse(time_units==1, time_taken*1, 
-#                                                     ifelse(time_units==2, time_taken*3,
-#                                                     ifelse(time_units==3, time_taken*9,
-#                                                     ifelse(time_units==4, time_taken*6,
-#                                                     ifelse(time_units==5, time_taken*60,
-#                                                     ifelse(time_units==6, time_taken*3*60,
-#                                                     ifelse(time_units==7, time_taken*9*60, time_taken*6*60))))))))
-# 
-# # merge facilties dataframes together
-# facilities <- merge(facilities, facilities2, by = c("hh_ID","facility_1_ID"))
-# 
-# # drop variables
-# facilities <- facilities %>% select(-time_taken, -time_units, -facility_1_ID)
-# 
-# ##########
-# # factor variables
-# ##########
-# facilities$fac_mode <-factor(facilities$fac_mode)
-#   
-# # merge with household characteristics
-# housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
-# str(housing_all)
-# 
-# # check for duplicates 
-# housing_all$hh_ID[duplicated(housing_all$hh_ID)]
-```
-
-```{r}
 ####################################################
 ## Farming Plots
 ####################################################
@@ -888,7 +822,68 @@ final_df <- merge(housing_final_data, hh_respondent, by="hh_ID")
 # remove unnecessary variables
 final_df <- final_df %>% select(-totalCanCarry20L,-totalCanStandOwn,-totalCanWalk5Km)
 
-str(final_df)
+# remove missing values
+final_df <- final_df[complete.cases(final_df),]
+
+df <- final_df
+
+# reorder variables
+df <- df %>% select(hh_ID,
+                                          visits_healthcenter,
+                                          visits_bazaar,
+                                          visits_localshop,
+                                          business,
+                                          use_lat,
+                                          main_use_flush,
+                                          defecation_public,
+                                          house_sharing,
+                                          housewall_material,
+                                          houseroof_material,
+                                          housefloor_material,
+                                          house_elec,
+                                          water_supply,
+                                          drinking_source_same,
+                                          does_water_purify,
+                                          garbage_collected,
+                                          lighting_source_type,
+                                          fuel_source_wood,
+                                          sex,
+                                          maritalStatus,
+                                          literacy,
+                                          education,
+                                          attendingCollege,
+                                          occupationType,
+                                          canCarry20L,
+                                          canWalk5Km,
+                                          canStandOwn,
+                                          bmiCategory,
+                                          isChild,
+                                            satisfaction,
+                                            age,
+                                            bmi,
+                                            numChildren,
+                                            hh_members,
+                                            house_age,
+                                            rent_estimate,
+                                            count_latrine,
+                                            house_rooms,
+                                            house_rooms_sleeping,
+                                            fuel_cost,
+                                            lighting_cost,
+                                            cellphone,
+                                            cell_cost,
+                                            fac_count,
+                                            pctUnderweight,
+                                            pctCanCarry20L,
+                                            pctCanWalk5Km,
+                                            pctCanStandOwn,
+                                            totalCultivablePlot,
+                                            totalOwnPlot)
+
+# scale data
+df <- df %>% select(-hh_ID)
+scale2 <- function(x, na.rm = FALSE) (x - mean(x, na.rm = na.rm)) / sd(x, na.rm)
+df <- df %>% mutate_if(is.numeric, scale2, na.rm = TRUE)
 ##################################################################################################################
 
 ##################################################################################################################
@@ -1413,7 +1408,7 @@ food_entries <- fooddiary_all %>% count(hh_ID)
 temp <- merge(calories, food_entries, by = "hh_ID")
 temp <- temp %>% mutate(hh_calories_total = n.x, hh_food_entries = n.y) %>% select(-n.x,-n.y)
 
-final_df_food <- merge(final_df, temp, by = "hh_ID")
+final_df_food <- merge(df, temp, by = "hh_ID")
 
 final_df_food <- final_df_food %>%mutate(avg_calories = hh_calories_total/hh_food_entries) %>% select(-hh_calories_total,-hh_food_entries)
 
@@ -1426,106 +1421,21 @@ final_df_food <- final_df_food %>% select(-avg_calories)
 summary(final_df_food$avg_calories_member)
 ```
 
-
-
-
 # PCA
 
 ```{r}
-# check data types
-str(final_df_food)
 
-
-#########################################################
-# Separate categorical variables and continuous variables
-#########################################################
-categorical_variables <- final_df %>% select(hh_ID,
-                                             visits_healthcenter,
-                                                visits_bazaar,
-                                                visits_localshop,
-                                                business,
-                                                use_lat,
-                                                main_use_flush,
-                                                defecation_public,
-                                                housewall_material,
-                                                houseroof_material,
-                                                housefloor_material,
-                                                house_elec,
-                                                water_supply,
-                                                drinking_source_same,
-                                                does_water_purify,
-                                                garbage_collected,
-                                                lighting_source_type,
-                                                fuel_source_wood,
-                                                sex,
-                                                maritalStatus,
-                                                literacy,
-                                                education,
-                                                attendingCollege,
-                                                occupationType,
-                                                bmiCategory,
-                                                isChild,
-                                                canCarry20L,
-                                                canWalk5Km,
-                                                canStandOwn)
-
-continuous_variables <- final_df %>% select(
-                                            -visits_healthcenter,
-                                                -visits_bazaar,
-                                                -visits_localshop,
-                                                -business,
-                                                -use_lat,
-                                                -main_use_flush,
-                                                -defecation_public,
-                                                -housewall_material,
-                                                -houseroof_material,
-                                                -housefloor_material,
-                                                -house_elec,
-                                                -water_supply,
-                                                -drinking_source_same,
-                                                -does_water_purify,
-                                                -garbage_collected,
-                                                -lighting_source_type,
-                                                -fuel_source_wood,
-                                                -sex,
-                                                -maritalStatus,
-                                                -literacy,
-                                               - education,
-                                                -attendingCollege,
-                                                -occupationType,
-                                                -bmiCategory,
-                                                -isChild,
-                                                -canCarry20L,
-                                                -canWalk5Km,
-                                                -canStandOwn)
-
-# scale continuous variables
-# scale variables except hh_ID
-continuous_variables1 <- apply(continuous_variables[,2:23], 2, scale)
-# add df back together
-continuous_variables <- data.frame(continuous_variables1,continuous_variables$hh_ID)
-continuous_variables <- continuous_variables %>% mutate(hh_ID = continuous_variables.hh_ID) %>% select(-continuous_variables.hh_ID)
-
-##################################
-# combine continous and categorical into one dataset
-##################################
-
-# merge categorical and continous variables into one dataframe
-pca_data <- merge(categorical_variables, continuous_variables, by ="hh_ID")
-
-# remove NAs
-pca_data_noNAs <- pca_data[complete.cases(pca_data),]
 # # recode dummy frame
-pca_data_noNAs <- dummy.data.frame(pca_data_noNAs)
+pca_data <- dummy.data.frame(df)
 # 
-str(pca_data_noNAs)
+str(pca_data)
 
-pca_data_PCAmixdata <- lapply(pca_data_noNAs, as.numeric)
-str(pca_data_PCAmixdata)
+pca_data <- lapply(pca_data, as.numeric)
+str(pca_data)
 
-pca_data_PCAmixdata <- as.data.frame(pca_data_PCAmixdata)
-pca_data_PCAmixdata <- pca_data_PCAmixdata %>% select(-hh_ID)
-str(pca_data_PCAmixdata)
+pca_data <- as.data.frame(pca_data)
+pca_data <- pca_data %>% select(-hh_ID)
+str(pca_data)
 ```
 
 ## Figure out dimensions of well-being using Factor Analysis
@@ -1536,11 +1446,12 @@ http://www.di.fc.ul.pt/~jpn/r/factoranalysis/factoranalysis.html#factor-analysis
 
 ```{r}
 # remove variables
-pca_data_PCAmixdata <- pca_data_PCAmixdata %>% select(-totalCanStandOwn,-totalCanWalk5Km,-totalCanCarry20L,-bmi)
+pca_data <- pca_data %>% select(-totalCanStandOwn,-totalCanWalk5Km,-totalCanCarry20L,-bmi)
 
-res.pca <- PCA(pca_data_PCAmixdata, graph = FALSE)
+res.pca <- PCA(pca_data, graph = FALSE)
 print(res.pca)
 ```
+
 
 The eigenvalues measure the amount of variation retained by each principal component. Eigenvalues are large for the first PCs and small for the subsequent PCs. That is, the first PCs corresponds to the directions with the maximum amount of variation in the data set.
 
@@ -1665,8 +1576,8 @@ https://rstudio-pubs-static.s3.amazonaws.com/376139_e9adaefdf4594a79a54a3f87ff48
 
 ```{r}
 
-ev <- eigen(cor(pca_data_PCAmixdata)) # get eigenvalues
-ap <- parallel(subject=nrow(pca_data_PCAmixdata),var=ncol(pca_data_PCAmixdata), rep=100, cent=.05)
+ev <- eigen(cor(pca_data)) # get eigenvalues
+ap <- parallel(subject=nrow(pca_data),var=ncol(pca_data), rep=100, cent=.05)
 nS <- nScree(x=ev$values, aparallel=ap$eigen$qevpea)
 plotnScree(nS)
 ```
@@ -1675,7 +1586,7 @@ Optimal factor levels = 20.
 Oblique rotation (rotate = “oblimin”) as I believe that there is a correlation in the factors.
 Used `Ordinary Least Squared/Minres` factoring (fm = “minres”), as it is known to provide results similar to `Maximum Likelihood` without assuming a multivariate normal distribution and derives solutions through iterative eigendecomposition like a principal axis.
 ```{r}
-factor20 <- fa(pca_data_PCAmixdata,nfactors = 20,rotate = "oblimin",fm="minres")
+factor20 <- fa(pca_data,nfactors = 20,rotate = "oblimin",fm="minres")
 print(factor20)
 ```
 
@@ -1709,7 +1620,7 @@ Visual approach: The visual approach detects the clustering tendency by counting
 ```{r}
 gradient.color <- list(low = "steelblue",  high = "white")
 
-pca_data_PCAmixdata %>%    # Remove column 5 (Species)
+pca_data %>%    # Remove column 5 (Species)
   scale() %>%     # Scale variables
   get_clust_tendency(n = 50, gradient = gradient.color)
 ```
@@ -1720,7 +1631,7 @@ Cluster of households can be seen in the top right corner.
 # Optimal number of clusters
 library("NbClust")
 library(factoextra)
-res.nbclust <- pca_data_PCAmixdata %>%
+res.nbclust <- pca_data %>%
   scale() %>%
   NbClust(distance = "euclidean",
           min.nc = 2, max.nc = 10, 
@@ -1731,16 +1642,16 @@ fviz_nbclust(res.nbclust, ggtheme = theme_minimal())
 
 ```{r}
 # Optimal number of clusters for k-means
-my_data <- scale(pca_data_PCAmixdata)
+my_data <- scale(pca_data)
 fviz_nbclust(my_data, kmeans, method = "gap_stat")
 ```
 ```{r}
 # Compute k-means
 set.seed(123)
-km.res <- kmeans(scale(pca_data_PCAmixdata), 3, nstart = 25)
+km.res <- kmeans(scale(pca_data), 3, nstart = 25)
 
 # Visualize
-fviz_cluster(km.res, data = pca_data_PCAmixdata,
+fviz_cluster(km.res, data = pca_data,
              palette = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07"),
              ggtheme = theme_minimal(),
              main = "Partitioning Clustering Plot"
@@ -1748,90 +1659,12 @@ fviz_cluster(km.res, data = pca_data_PCAmixdata,
 ```
 
 
-
-
-
-
-
 # Lasso and Ridge Regression
 
 
-
-
-
-
-
-Using data from final_df = without food diary information.
+Using data from df = without food diary information. Data is scaled.
 
 ```{r}
-# remove missing values
-final_df <- final_df[complete.cases(final_df),]
-
-#########################################################
-# Separate categorical variables and continuous variables
-#########################################################
-categorical_variables <- final_df %>% select(hh_ID,
-                                          visits_healthcenter,
-                                          visits_bazaar,
-                                          visits_localshop,
-                                          business,
-                                          use_lat,
-                                          main_use_flush,
-                                          defecation_public,
-                                          house_sharing,
-                                          housewall_material,
-                                          houseroof_material,
-                                          housefloor_material,
-                                          house_elec,
-                                          water_supply,
-                                          drinking_source_same,
-                                          does_water_purify,
-                                          garbage_collected,
-                                          lighting_source_type,
-                                          fuel_source_wood,
-                                          sex,
-                                          maritalStatus,
-                                          literacy,
-                                          education,
-                                          attendingCollege,
-                                          occupationType,
-                                          canCarry20L,
-                                          canWalk5Km,
-                                          canStandOwn,
-                                          bmiCategory,
-                                          isChild)
-
-continuous_variables <- final_df %>% select(hh_ID,
-                                            satisfaction,
-                                            age,
-                                            bmi,
-                                            numChildren,
-                                            hh_members,
-                                            house_age,
-                                            rent_estimate,
-                                            count_latrine,
-                                            house_rooms,
-                                            house_rooms_sleeping,
-                                            fuel_cost,
-                                            lighting_cost,
-                                            cellphone,
-                                            cell_cost,
-                                            fac_count,
-                                            pctUnderweight,
-                                            pctCanCarry20L,
-                                            pctCanWalk5Km,
-                                            pctCanStandOwn,
-                                            totalCultivablePlot,
-                                            totalOwnPlot)
-
-
-# scale continuous variables
-# scale variables except hh_ID
-continuous_variables1 <- apply(continuous_variables[,2:22], 2, scale)
-# add df back together
-continuous_variables <- data.frame(continuous_variables1,continuous_variables$hh_ID)
-continuous_variables <- continuous_variables %>% mutate(hh_ID = continuous_variables.hh_ID) %>% select(-continuous_variables.hh_ID)
-df <- merge(continuous_variables, categorical_variables, by = "hh_ID")
 
 ############################
 # lasso
@@ -2001,14 +1834,28 @@ plot(cv.lasso)
 ```
 The value of lambda will be chosen by cross-validation. The plot shows cross-validated mean squared error. As lambda decreases, the mean squared error decreases. Ridge includes all the variables in the model and the value of lambda selected is indicated by the vertical lines.
 
-# Lasso Method #2
-```{r}
-# Fit the LASSO model (Lasso: Alpha = 1)
-set.seed(100)
-cv.lasso <- cv.glmnet(x, y, family='binomial', alpha=1, parallel=TRUE, standardize=TRUE, type.measure='auc')
 
-# Results
-plot(cv.lasso)
+# Lasso Method #2
+
+
+# Regression
+```{r}
+lm.fit <- glm(satisfaction ~ fac_count + visits_healthcenter + visits_bazaar + 
+                           visits_localshop + business + count_latrine + 
+                           main_use_flush + defecation_public + house_age + 
+                           rent_estimate + house_sharing + housewall_material + 
+                           houseroof_material + housefloor_material + house_rooms + 
+                           house_rooms_sleeping + house_elec + fuel_cost + 
+                           lighting_cost + cellphone + cell_cost + water_supply + 
+                           drinking_source_same + does_water_purify + garbage_collected + 
+                           lighting_source_type + fuel_source_wood + totalCultivablePlot + 
+                           totalOwnPlot + satisfaction + numChildren + hh_members + sex + 
+                           age + maritalStatus + literacy + education + attendingCollege + 
+                           occupationType + canCarry20L + canWalk5Km + canStandOwn + bmi + 
+                           bmiCategory + isChild + pctUnderweight + pctCanCarry20L + 
+                           pctCanWalk5Km + pctCanStandOwn, data = df)
+summary(lm.fit)
+
 ```
 
 
@@ -2024,3 +1871,4 @@ Relatively low caloric variation/or feast vs famine
 
 # Links
 http://wavedatalab.github.io/machinelearningwithr/post4.html
+https://datasciencebeginners.com/2018/11/26/functions-and-packages-for-feature-selection-in-r/
