@@ -1767,59 +1767,6 @@ Using data from final_df = without food diary information.
 # remove missing values
 final_df <- final_df[complete.cases(final_df),]
 
-# # # reorder columns
-# final_df <- final_df %>% select(hh_ID,
-#                                 satisfaction,
-#                                 age,
-#                                 bmi,
-#                                 numChildren,
-#                                 hh_members,
-#                                 house_age,
-#                                 rent_estimate,
-#                                 count_latrine,
-#                                 house_rooms,
-#                                 house_rooms_sleeping,
-#                                 fuel_cost,
-#                                 lighting_cost,
-#                                 cellphone,
-#                                 cell_cost,
-#                                 fac_count,
-#                                 pctUnderweight,
-#                                 pctCanCarry20L,
-#                                 pctCanWalk5Km,
-#                                 pctCanStandOwn,
-#                                 totalCultivablePlot,
-#                                 totalOwnPlot,
-#                                 visits_healthcenter,
-#                                 visits_bazaar,
-#                                 visits_localshop,
-#                                 business,
-#                                 use_lat,
-#                                 main_use_flush,
-#                                 defecation_public,
-#                                 house_sharing,
-#                                 housewall_material,
-#                                 houseroof_material,
-#                                 housefloor_material,
-#                                 house_elec,
-#                                 water_supply,
-#                                 drinking_source_same,
-#                                 does_water_purify,
-#                                 garbage_collected,
-#                                 lighting_source_type,
-#                                 fuel_source_wood,
-#                                 sex,
-#                                 maritalStatus,
-#                                 literacy,
-#                                 education,
-#                                 attendingCollege,
-#                                 occupationType,
-#                                 canCarry20L,
-#                                 canWalk5Km,
-#                                 canStandOwn,
-#                                 bmiCategory,
-#                                 isChild)
-
 #########################################################
 # Separate categorical variables and continuous variables
 #########################################################
@@ -1886,6 +1833,9 @@ continuous_variables <- data.frame(continuous_variables1,continuous_variables$hh
 continuous_variables <- continuous_variables %>% mutate(hh_ID = continuous_variables.hh_ID) %>% select(-continuous_variables.hh_ID)
 df <- merge(continuous_variables, categorical_variables, by = "hh_ID")
 
+############################
+# lasso
+############################
 # data partition
 set.seed(1234) # random seed for reproducibility of results
 # train set = 70 percent of the data 
@@ -1897,13 +1847,64 @@ test = df[-index,] # create the test data
 dim(train)
 dim(test)
 
+# reorder columns
+train <- train %>% select(hh_ID,
+                                satisfaction,
+                                age,
+                                bmi,
+                                numChildren,
+                                hh_members,
+                                house_age,
+                                rent_estimate,
+                                count_latrine,
+                                house_rooms,
+                                house_rooms_sleeping,
+                                fuel_cost,
+                                lighting_cost,
+                                cellphone,
+                                cell_cost,
+                                fac_count,
+                                pctUnderweight,
+                                pctCanCarry20L,
+                                pctCanWalk5Km,
+                                pctCanStandOwn,
+                                totalCultivablePlot,
+                                totalOwnPlot,
+                                visits_healthcenter,
+                                visits_bazaar,
+                                visits_localshop,
+                                business,
+                                use_lat,
+                                main_use_flush,
+                                defecation_public,
+                                house_sharing,
+                                housewall_material,
+                                houseroof_material,
+                                housefloor_material,
+                                house_elec,
+                                water_supply,
+                                drinking_source_same,
+                                does_water_purify,
+                                garbage_collected,
+                                lighting_source_type,
+                                fuel_source_wood,
+                                sex,
+                                maritalStatus,
+                                literacy,
+                                education,
+                                attendingCollege,
+                                occupationType,
+                                canCarry20L,
+                                canWalk5Km,
+                                canStandOwn,
+                                bmiCategory,
+                                isChild)
 
+# dummy code categorical predictor variables
+x <- model.matrix(satisfaction~., train)[,23:51]
 
-
-
-
-
-
+# outcome variable
+y <- train$satisfaction
 
 
 
@@ -1941,6 +1942,31 @@ x.test <- model.matrix( ~ fac_count + visits_healthcenter + visits_bazaar +
                            pctCanWalk5Km + pctCanStandOwn - 1, test)
 y.test  <- test$satisfaction
 
+fit.lasso <- glmnet(x.train, y.train, family="gaussian", alpha=1)
+fit.ridge <- glmnet(x.train, y.train, family="gaussian", alpha=0)
+fit.elnet <- glmnet(x.train, y.train, family="gaussian", alpha=.5)
+
+# 10-fold Cross validation for each alpha = 0, 0.1, ... , 0.9, 1.0
+# (For plots on Right)
+for (i in 0:10) {
+    assign(paste("fit", i, sep=""), cv.glmnet(x.train, y.train, type.measure="mse", 
+                                              alpha=i/10,family="gaussian"))
+}
+
+# Plot solution paths:
+par(mfrow=c(3,2))
+# For plotting options, type '?plot.glmnet' in R console
+plot(fit.lasso, xvar="lambda")
+plot(fit10, main="LASSO")
+
+plot(fit.ridge, xvar="lambda")
+plot(fit0, main="Ridge")
+
+plot(fit.elnet, xvar="lambda")
+plot(fit5, main="Elastic Net")
+```
+
+```{r}
 # Ridge: alpha = 0)
 set.seed(123)
 r.model <- glmnet(x.train, y.train, alpha=0)
@@ -1948,27 +1974,53 @@ r.model <- glmnet(x.train, y.train, alpha=0)
 # Lasso
 l.model <- glmnet(x.train, y.train, alpha=1)
 
-plot(l.model, main="Plot of Lasso")
+plot(l.model, main="Plot of Lasso",label=TRUE)
 
-plot(r.model, main="Plot of Ridge Regression")
+plot(r.model, main="Plot of Ridge Regression",label=TRUE)
 ```
-
 ```{r}
 # RIDGE
 fit0 <- cv.glmnet(x.train, y.train, type.measure="mse", alpha=0, family="gaussian")
 yhat0 <- predict(fit0, s=fit0$lambda.1se, newx=x.test)
 (mse0 <- mean((y.test - yhat0)^2))
-```
 
-```{r}
 # LASSO
 fit0 <- cv.glmnet(x.train, y.train, type.measure="mse", alpha=1, family="gaussian")
 yhat0 <- predict(fit0, s=fit0$lambda.1se, newx=x.test)
 (mse0 <- mean((y.test - yhat0)^2))
+# lambda performs better
 ```
+
+*Ridge Regression and Lasso*
+
+```{r}
+x2=model.matrix(satisfaction~.-1,data=final_df)
+plot(fit.ridge,xvar="lambda",label=TRUE)
+plot(fit.lasso,xvar="lambda",label=TRUE)
+plot(cv.lasso)
+```
+The value of lambda will be chosen by cross-validation. The plot shows cross-validated mean squared error. As lambda decreases, the mean squared error decreases. Ridge includes all the variables in the model and the value of lambda selected is indicated by the vertical lines.
+
+# Lasso Method #2
+```{r}
+# Fit the LASSO model (Lasso: Alpha = 1)
+set.seed(100)
+cv.lasso <- cv.glmnet(x, y, family='binomial', alpha=1, parallel=TRUE, standardize=TRUE, type.measure='auc')
+
+# Results
+plot(cv.lasso)
+```
+
+
+
+
+
 # Notes
 Responses in food diary:
 Look over time and identify periods were there were responses
 Seasonal access to calories
 Mean and variance as access to calories and cluster households
 Relatively low caloric variation/or feast vs famine
+
+# Links
+http://wavedatalab.github.io/machinelearningwithr/post4.html
