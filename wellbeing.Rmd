@@ -1390,10 +1390,23 @@ p <- ggplot(df_food_basic1, aes(avg_calories_member, ..count..))
 p <- p + geom_histogram(binwidth = 1, colour="white")
 p
 
+df_food_basic1 <- df_food_basic1 %>% filter(avg_calories_member >= 0 & avg_calories_member < 16090) # error?
+df_food_basic1 <- df_food_basic1 %>% filter(avg_calories_member != 10000) # error?
 qplot(x=week_number, y=avg_calories_member,
       data=df_food_basic1, na.rm=TRUE,
-      main="Average Caloric Intake of HH Member",
-      xlab="Date", ylab="Temperature (°C)")
+      main="Average Weekly Caloric Intake",
+      xlab="Date", ylab="Calories")
+
+ggplot(df_food_basic1, aes(x = week_number, y = avg_calories_member)) +
+    geom_point(aes(color = hh_ID),size = .9) + 
+  labs(title = "Average Weekly Caloric Intake", x = "Week Number", y = "Calories")
+
+# Change stripchart colors by groups
+p<-ggplot(df_food_basic1, aes(x=avg_calories_member)) 
+p+ geom_histogram() + 
+  labs(title = "Average Weekly Caloric Intake", x = "Calories", y = "Count")
+
+str(df_food_basic1)
 ```
 
 

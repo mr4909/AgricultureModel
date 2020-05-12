@@ -1,0 +1,233 @@
+---
+title: "crowdsourcing"
+author: "Mari Roberts"
+date: "5/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Employment, 
+Transportation Tools, 
+Food consumption, 
+Bad Shocks, 
+Good Shocks, 
+Illness, 
+School attendance,
+Subjective Well-being,
+Drinking water Diary
+
+# Good Shocks
+```{r}
+goodshocks_cs_test <- `39. GoodShocks_level_1.dta` %>% filter(recall == "season")
+# goodshocks_cs_test <- merge(goodshocks_cs_test, `40. GoodShocks_event_repeat_level_2.dta`, by == c("hh_ID","gshock_1_ID"))
+
+######
+# crowdourced info
+######
+gs_cs <- goodshocks_cs_test %>% filter(crowdsource == 1) %>% select(hh_ID, submissiondate, recall, week_number, 
+                                  yesno)
+# find satisfaction average
+gs_cs <- gs_cs %>% 
+  group_by(hh_ID) %>%
+  summarise_at(vars(-submissiondate, -recall, -week_number), funs(mean(., na.rm=TRUE)))
+gs_cs <- transform(gs_cs, gs_cs = rowMeans(gs_cs[,-1], na.rm = TRUE))
+gs_cs <- gs_cs %>% select(hh_ID, gs_cs)
+
+######
+# respondent info
+######
+gs_r <- goodshocks_cs_test %>% filter(crowdsource == 0) %>% select(hh_ID, submissiondate, recall, week_number, 
+                                  yesno)
+# find satisfaction average
+gs_r <- gs_r %>% 
+  group_by(hh_ID) %>%
+  summarise_at(vars(-submissiondate, -recall, -week_number), funs(mean(., na.rm=TRUE)))
+gs_r <- transform(gs_r, gs_r = rowMeans(gs_r[,-1], na.rm = TRUE))
+gs_r <- gs_r %>% select(hh_ID, gs_r)
+
+######
+# merge
+######
+
+satisfaction_all <- merge(satisfaction_r, satisfaction_cs, by = "hh_ID")
+
+wellbeing_cs <- `69. SubjectiveWellbeing.dta`  %>% 
+  filter(crowdsource == 1 & recall == "week") %>% 
+  select( hh_ID,
+          week_number,
+          crowdsource,
+          sex_cs = gender,
+          age_cs = age,
+          education_cs = education,
+          highest_class_cs = highest_class,
+          relationship) 
+```
+
+# Illness
+```{r}
+illness_cs_test <- `85. illness_level_1.dta` %>% filter(recall == "week")
+
+######
+# crowdourced info
+######
+illness_cs <- illness_cs_test %>% filter(crowdsource == 1) %>% select(hh_ID, submissiondate, recall, week_number, 
+                                  illness_status)
+
+# find satisfaction average
+illness_cs <- illness_cs %>% 
+  group_by(hh_ID) %>%
+  summarise_at(vars(-submissiondate, -recall, -week_number), funs(mean(., na.rm=TRUE)))
+illness_cs <- transform(illness_cs, illness_cs = rowMeans(illness_cs[,-1], na.rm = TRUE))
+illness_cs <- illness_cs %>% select(hh_ID, illness_cs)
+
+######
+# respondent info
+######
+illness_r <- illness_cs_test %>% filter(crowdsource == 0) %>% select(hh_ID, submissiondate, recall, week_number, 
+                                  illness_status)
+
+# find satisfaction average
+illness_r <- illness_r %>% 
+  group_by(hh_ID) %>%
+  summarise_at(vars(-submissiondate, -recall, -week_number), funs(mean(., na.rm=TRUE)))
+illness_r <- transform(illness_r, illness_r = rowMeans(illness_r[,-1], na.rm = TRUE))
+illness_r <- illness_r %>% select(hh_ID, illness_r)
+
+######
+# merge
+######
+
+illness_avg <- merge(illness_r, illness_cs, by = "hh_ID")
+
+# Overlaid histograms
+illness_avg <- melt(illness_avg, id=(c("hh_ID")))
+illness_avg <- illness_avg %>% mutate(variable = ifelse(variable == "illness_r", "Respondent", "Crowdsource"))
+ggplot(illness_avg, aes(x=value, color=variable)) +
+  geom_histogram(fill="white", alpha=0.5, position="identity")
+
+# mean
+mu <- plyr::ddply(illness_avg, "variable", summarise, grp.mean=mean(value))
+p<-ggplot(illness_avg, aes(x=value, fill=variable, color=variable)) +
+  geom_histogram(position="identity", alpha=0.5)+ labs(title="Does Anyone in the Houshold Experience Illness or Injury?",x="Illness Rate", y = "Count")+ theme(legend.title = element_blank())
+p+geom_vline(data=mu, aes(xintercept=grp.mean, color=variable,
+             linetype="dashed"))
+
+```
+
+```{r}
+
+######
+# merge
+######
+illness_cs <- `85. illness_level_1.dta`  %>% 
+  filter(crowdsource == 1 & recall == "week") %>% 
+  select( hh_ID,
+          week_number,
+          crowdsource,
+          sex_cs = gender,
+          age_cs = age,
+          education_cs = education,
+          highest_class_cs = highest_class,
+          relationship)
+illness_cs <- illness_cs %>% distinct()
+illness_cs <- illness_cs %>% filter(sex_cs=="1" | sex_cs =="2")
+illness_cs <- illness_cs %>% filter(age_cs >= 0 & age_cs <= 110)
+
+
+######
+# average age, sex, education, etc of crowdsourcee
+######
+
+# sex_cs <- illness_cs %>% group_by(hh_ID) %>% tally(sex_cs)
+# sex_cs <- sex_cs %>% mutate(hh_calories_total = n) %>% select(-n)
+# age_cs <- illness_cs %>% group_by(hh_ID) %>% tally(age_cs)
+# age_cs <- age_cs %>% mutate(hh_calories_total = n) %>% select(-n)
+# education_cs <- illness_cs %>% group_by(hh_ID) %>% tally(education_cs)
+# education_cs <- education_cs %>% mutate(hh_calories_total = n) %>% select(-n)
+# relationship <- illness_cs %>% group_by(hh_ID) %>% tally(relationship)
+# relationship <- relationship %>% mutate(hh_calories_total = n) %>% select(-n)
+
+# merge crowdsource info with respondent info
+# illness_respondent <- hh_respondent %>% mutate(is_cs = 0)
+# illness_cs <- illness_cs %>% mutate(is_cs = 1)
+
+respondent <- HouseholdComposition_members_level_2.dta %>%filter(hhm_relation == 1) %>% 
+  select(hh_ID, hhm_sex, hhm_age, education)
+
+illness_age_avg <- merge(illness_cs, respondent, by = "hh_ID")
+illness_age_avg <- illness_age_avg %>% select(hh_ID, age_cs, hhm_age)
+illness_age_avg <- melt(illness_age_avg, id=(c("hh_ID")))
+
+# Overlaid histograms
+
+mu <- plyr::ddply(illness_age_avg, "variable", summarise, grp.mean=mean(value))
+illness_age_avg <- illness_age_avg %>% mutate(variable = ifelse(variable == "hhm_age", "Respondent", "Crowdsource"))
+
+p<-ggplot(illness_age_avg, aes(x=value, fill=variable, color=variable)) +
+  geom_histogram(position="identity", alpha=0.5)+ labs(title="Does Anyone in the Houshold Experience Illness or Injury?",x="Illness Rate", y = "Count")+ theme(legend.title = element_blank())
+p+geom_vline(data=mu, aes(xintercept=grp.mean, color=variable,
+             linetype="dashed"))
+
+```
+
+# Wellbeing
+```{r}
+
+wellbeing_cs_test <- `69. SubjectiveWellbeing.dta` %>% filter(recall == "week")
+
+######
+# crowdourced info
+######
+satisfaction_cs <- wellbeing_cs_test %>% filter(crowdsource == 1) %>% select(hh_ID, submissiondate, recall, week_number, 
+                                  g1_satisfied, g2_satisfied, g3_satisfied, 
+                                  g4_satisfied, g5_satisfied)
+
+satisfaction_cs <- satisfaction_cs[!duplicated(satisfaction_cs$hh_ID), ]
+
+
+# find satisfaction average
+satisfaction_cs <- satisfaction_cs %>% 
+  group_by(hh_ID) %>%
+  summarise_at(vars(-submissiondate, -recall, -week_number), funs(mean(., na.rm=TRUE)))
+satisfaction_cs <- transform(satisfaction_cs, satisfaction_cs = rowMeans(satisfaction_cs[,-1], na.rm = TRUE))
+satisfaction_cs <- satisfaction_cs %>% select(hh_ID, satisfaction_cs)
+
+######
+# respondent info
+######
+satisfaction_r <- wellbeing_cs_test %>% filter(crowdsource == 0) %>% select(hh_ID, submissiondate, recall, week_number, 
+                                  g1_satisfied, g2_satisfied, g3_satisfied, 
+                                  g4_satisfied, g5_satisfied)
+
+satisfaction_r <- satisfaction_r[!duplicated(satisfaction_r$hh_ID), ]
+
+# find satisfaction average
+satisfaction_r <- satisfaction_r %>% 
+  group_by(hh_ID) %>%
+  summarise_at(vars(-submissiondate, -recall, -week_number), funs(mean(., na.rm=TRUE)))
+satisfaction_r <- transform(satisfaction_r, satisfaction_r = rowMeans(satisfaction_r[,-1], na.rm = TRUE))
+satisfaction_r <- satisfaction_r %>% select(hh_ID, satisfaction_r)
+
+######
+# merge
+######
+
+satisfaction_all <- merge(satisfaction_r, satisfaction_cs, by = "hh_ID")
+
+wellbeing_cs <- `69. SubjectiveWellbeing.dta`  %>% 
+  filter(crowdsource == 1 & recall == "week") %>% 
+  select( hh_ID,
+          week_number,
+          crowdsource,
+          sex_cs = gender,
+          age_cs = age,
+          education_cs = education,
+          highest_class_cs = highest_class,
+          relationship) 
+
+wellbeing_cs <- wellbeing_cs[!duplicated(wellbeing_cs$hh_ID), ]
+
+```
