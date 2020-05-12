@@ -1,0 +1,290 @@
+---
+title: "Feature Selection"
+author: "Mari Roberts"
+date: "5/11/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Lasso - Feature Selection
+```{r}
+#remotes::install_github('mlampros/FeatureSelection')
+# https://vimeo.com/73334369
+rm(list=(ls()[ls()!="final_df"]))
+# scale continuous variables
+# scale variables except hh_ID
+# df1 <- apply(df[,32:50], 2, scale) # dont scale satisfaction
+# df <- as.data.frame(df)
+# satisfaction <- df$satisfaction #lpsa df = tdat
+# df <- df %>% select(-satisfaction)
+df <- final_df %>% select(-hh_ID, -use_lat) # use latrine causing issues for some reason
+# make all numeric
+df$housewall_material <- as.numeric(df$housewall_material)
+df$houseroof_material <- as.numeric(df$houseroof_material)
+df$housefloor_material <- as.numeric(df$housefloor_material)
+df$lighting_source_type <- as.numeric(df$lighting_source_type)
+df$bmiCategory <- as.numeric(df$bmiCategory)
+df$occupationType <- as.numeric(df$occupationType)
+df[] <- lapply(df, function(x) as.numeric(as.factor(x)))
+
+index = sample(1:nrow(df), 0.7*nrow(df))
+tdat = df[index,] # create the training data 
+vdat = df[-index,] # create the test data
+
+lpsa <- tdat$satisfaction #124
+tdats <- tdat %>% select(-satisfaction)
+
+scale2 <- function(x, na.rm = FALSE) (x - mean(x, na.rm = na.rm)) / sd(x, na.rm)
+tdats <- tdats %>% mutate_if(is.numeric, scale2, na.rm = TRUE)
+tdats <- data_frame(tdats)
+
+attach(tdats)
+
+# evaluate correlations
+# cor(tdats)
+# 
+
+tdats_matrix <- model.matrix( ~ fac_count + visits_healthcenter + visits_bazaar +
+                           visits_localshop + business + count_latrine +
+                           main_use_flush + defecation_public + house_age +
+                           rent_estimate + house_sharing + housewall_material +
+                           houseroof_material + housefloor_material + house_rooms +
+                           house_rooms_sleeping + house_elec + fuel_cost +
+                           lighting_cost + cellphone + cell_cost + water_supply +
+                           drinking_source_same + does_water_purify + garbage_collected +
+                           lighting_source_type + fuel_source_wood + totalCultivablePlot +
+                           totalOwnPlot + numChildren + hh_members + sex +
+                           age + maritalStatus + literacy + education + attendingCollege +
+                           occupationType + canCarry20L + canWalk5Km + canStandOwn + bmi +
+                           bmiCategory + isChild + pctUnderweight + pctCanCarry20L +
+                           pctCanWalk5Km + pctCanStandOwn - 1, tdats)
+
+
+# include intercept because we didnt standardize the response 'satisfaction'
+lasso <- lars(x=tdats_matrix,y=satisfied, type= 'lasso', 
+              trace = FALSE, 
+              normalize = TRUE, 
+              intercept = TRUE)
+par(mfrow=c(1,1));plot(lasso)
+
+fit.lasso <- glmnet(tdats_matrix, lpsa)
+plot(fit.lasso, xvar="lambda", label=TRUE)
+
+cv.lasso <- cv.glmnet(tdats_matrix, lpsa)
+plot(cv.lasso) # 
+
+coef(cv.lasso)
+
+mse <- sqrt( apply((lpsa[-tdats]-pred)^2, 2, mean) )
+plot(log(lasso.tr$lambda), mse, type="b", xlab="Log(lambda)")
+```
+
+```{r}
+round(coef(lasso),3) # look at lasso coefficients at each step
+# s = shrinkage factor
+predict.lars(object = lasso, s=0.375, mode = 'fraction', type = 'coefficients') # beta hat
+predict.lars(object = lasso, newx=tdats, s= 0.375, mode = 'fraction', type = 'fit') # reg line
+
+# Build lasso from the ground up (TOO BIG)
+# absum <- sum(abs(OLS$coef[-1,1]))
+# absum
+
+# t <- apply(abs(coef(lasso)),1,sum) # sum of abs value of ols coefficients
+# s <- t/absum
+# 
+# plot(s, coef(lasso)[,1],
+#       ylim=c(-0.3,0.7),
+#       type='l',
+#       lwd=2,
+#       xlab='Shrinkage factor s',
+#       main= 'Lasso path - coefficients as a function of shrinkage factor', 
+#       xlim=c(0,1.2),
+#       axes=FALSE, ylab = 'coefficient', 
+#       cex.lab = 1.5, cex.axis = 1.4)
+# axis(1, at=seq(0,1,.2),cex.axis = 1.4)
+# axis(2, at=seq(-.3,.7,.2),cex.axis = 1.4)
+# lines(s, coef(lasso)[,2],lwd=2)
+# lines(s, coef(lasso)[,3],lwd=2)
+
+coef(lasso)
+
+# 10 fold cross validation for choosing shrinkage factor s
+# model is fit on entire training set at chosen s, coefficients estimates are stored, MSE computed
+
+# generate a vector of holdout labels
+# 86 observations
+cvlab <- sample(1:10, 86, replace = TRUE)
+
+table(cvlab) # what did we end up with each set
+
+# create a vectorof candidate s values
+# try each s value on all cross validate dsets
+svec <- seq(0,1,0.05)
+J <- length(svec) # 20 values of s in consideration
+
+# initialize a list to store lasso objects from k fold cross validation
+lassolist <- list()
+# intialize a list to store predictions from each lasso set
+predtrain <-list()
+
+# intialize a matrix to store MSE
+# rows correspondto the J values of s, columns correspond to the ten holdout sets
+MSEstore <- matrix(NA, 0, 10)
+
+# use a forloop to get each lasso  holding out the ith set
+# then predict the ith set using the holdout model
+for(i in 1:10){
+  
+  lassolist[[i]] <- lars(x=as.matrix(tdats)[cvlab!=i,],y=lpsa[cvlab!=i],
+                         type='lasso',trace = FALSE, normalize = TRUE, intercept = TRUE)
+  
+  predtrain[[i]] <- fit <- predict.lars(object=lassolist[[i]],newx= tdats[cvlab==i,],s=svec, 
+                                        mode = 'fraction', type = 'fit')$fit
+  
+  # start a new loop to get MSE for each combination of the ith holdout set and jth value of s
+  for(j in 1:J){
+    MSEstore[j,i] <- mean((predtrain[[i]][,j]-lpsa[cvlab==i])^2) # computes MSE
+  }
+}
+
+# these apply statements compute mean and standard error of the observed MSEsat J value
+meanMSE <- apply(MSEstore, 1, mean)
+stdMSE <-apply(MSEstore,1,sd)/sqrt(10)
+```
+
+# Lasso (MDML Code)
+
+```{r}
+############################
+# lasso
+############################
+df1 <- final_df
+
+# reorder variables
+df1 <- df1 %>% select(hh_ID,
+                                          visits_healthcenter,
+                                          visits_bazaar,
+                                          visits_localshop,
+                                          business,
+                                          use_lat,
+                                          main_use_flush,
+                                          defecation_public,
+                                          house_sharing,
+                                          housewall_material,
+                                          houseroof_material,
+                                          housefloor_material,
+                                          house_elec,
+                                          water_supply,
+                                          drinking_source_same,
+                                          does_water_purify,
+                                          garbage_collected,
+                                          lighting_source_type,
+                                          fuel_source_wood,
+                                          sex,
+                                          maritalStatus,
+                                          literacy,
+                                          education,
+                                          attendingCollege,
+                                          occupationType,
+                                          canCarry20L,
+                                          canWalk5Km,
+                                          canStandOwn,
+                                          bmiCategory,
+                                          isChild,
+                                            satisfaction,
+                                            age,
+                                            bmi,
+                                            numChildren,
+                                            hh_members,
+                                            house_age,
+                                            rent_estimate,
+                                            count_latrine,
+                                            house_rooms,
+                                            house_rooms_sleeping,
+                                            fuel_cost,
+                                            lighting_cost,
+                                            cellphone,
+                                            cell_cost,
+                                            fac_count,
+                                            pctUnderweight,
+                                            pctCanCarry20L,
+                                            pctCanWalk5Km,
+                                            pctCanStandOwn,
+                                            totalCultivablePlot,
+                                            totalOwnPlot)
+
+# scale data
+df1 <- df1 %>% select(-hh_ID)
+scale2 <- function(x, na.rm = FALSE) (x - mean(x, na.rm = na.rm)) / sd(x, na.rm)
+df1 <- df1 %>% mutate_if(is.numeric, scale2, na.rm = TRUE)
+head(df1)
+# data partition
+set.seed(1234) # random seed for reproducibility of results
+# train set = 70 percent of the data 
+# test set = 30 percent
+index = sample(1:nrow(df1), 0.7*nrow(df1))
+train = df1[index,] # create the training data 
+test = df1[-index,] # create the test data
+# check dimensions
+dim(train)
+dim(test)
+
+# model matrix
+x.train <- model.matrix( ~ fac_count + visits_healthcenter + visits_bazaar + 
+                           visits_localshop + business + use_lat + count_latrine + 
+                           main_use_flush + defecation_public + house_age + 
+                           rent_estimate + house_sharing + housewall_material + 
+                           houseroof_material + housefloor_material + house_rooms + 
+                           house_rooms_sleeping + house_elec + fuel_cost + 
+                           lighting_cost + cellphone + cell_cost + water_supply + 
+                           drinking_source_same + does_water_purify + garbage_collected + 
+                           lighting_source_type + fuel_source_wood + totalCultivablePlot + 
+                           totalOwnPlot + satisfaction + numChildren + hh_members + sex + 
+                           age + maritalStatus + literacy + education + attendingCollege + 
+                           occupationType + canCarry20L + canWalk5Km + canStandOwn + bmi + 
+                           bmiCategory + isChild + pctUnderweight + pctCanCarry20L + 
+                           pctCanWalk5Km + pctCanStandOwn - 1, train)
+y.train <- train$satisfaction
+
+x.test <- model.matrix( ~ fac_count + visits_healthcenter + visits_bazaar + 
+                          visits_localshop + business + use_lat + count_latrine + 
+                          main_use_flush + defecation_public + house_age + 
+                          rent_estimate + house_sharing + housewall_material + 
+                          houseroof_material + housefloor_material + house_rooms + 
+                          house_rooms_sleeping + house_elec + fuel_cost + 
+                          lighting_cost + cellphone + cell_cost + water_supply + 
+                          drinking_source_same + does_water_purify + garbage_collected + 
+                          lighting_source_type + fuel_source_wood + totalCultivablePlot + 
+                          totalOwnPlot + satisfaction + numChildren + hh_members + sex + 
+                          age + maritalStatus + literacy + education + attendingCollege + 
+                          occupationType + canCarry20L + canWalk5Km + canStandOwn + bmi + 
+                          bmiCategory + isChild + pctUnderweight + pctCanCarry20L + 
+                          pctCanWalk5Km + pctCanStandOwn - 1, test)
+y.test  <- test$satisfaction
+
+# Ridge: alpha = 0)
+set.seed(1234)
+r.model <- glmnet(x.train, y.train, alpha=0)
+
+# Lasso
+l.model <- glmnet(x.train, y.train, alpha=1)
+
+plot(l.model, main="Plot of Lasso",label=TRUE)
+
+plot(r.model, main="Plot of Ridge Regression",label=TRUE)
+```
+```{r}
+# RIDGE
+fit0 <- cv.glmnet(x.train, y.train, type.measure="mse", alpha=0, family="gaussian")
+yhat0 <- predict(fit0, s=fit0$lambda.1se, newx=x.test)
+(mse0 <- mean((y.test - yhat0)^2))
+
+# LASSO
+fit0 <- cv.glmnet(x.train, y.train, type.measure="mse", alpha=1, family="gaussian")
+yhat0 <- predict(fit0, s=fit0$lambda.1se, newx=x.test)
+(mse0 <- mean((y.test - yhat0)^2))
+# lambda performs better
+```
