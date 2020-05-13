@@ -789,31 +789,34 @@ Don't need info below for now. Information by specific plot.
 # 
 # # no duplicates
 # plots$hh_ID[duplicated(plots$hh_ID)]
+```
 
+##Subjective Wellbeing and Final HH Dataset
+```{r}
 ####################################################
 # Subjective Wellbeing
 ####################################################
 
 # Which step of ladder (scale of 0 to 10) do you feel you stand at present?
-wellbeing <- `69. SubjectiveWellbeing.dta` %>% select(hh_ID, submissiondate, recall, week_number, 
-                                  g1_satisfied, g2_satisfied, g3_satisfied, 
-                                  g4_satisfied, g5_satisfied)
-
-# find satisfaction average
-wellbeing_avg <- wellbeing %>% 
-  group_by(hh_ID) %>%
-  summarise_at(vars(-submissiondate, -recall, -week_number), funs(mean(., na.rm=TRUE)))
-wellbeing_avg <- transform(wellbeing_avg, satisfaction = rowMeans(wellbeing_avg[,-1], na.rm = TRUE))
-
-wellbeing_avg <- wellbeing_avg %>% select(hh_ID, satisfaction)
-
-housing_final_data <- merge(housing_all, wellbeing_avg, by = "hh_ID")
+# wellbeing <- `69. SubjectiveWellbeing.dta` %>% select(hh_ID, submissiondate, recall, week_number, 
+#                                   g1_satisfied, g2_satisfied, g3_satisfied, 
+#                                   g4_satisfied, g5_satisfied)
+# 
+# # find satisfaction average
+# wellbeing_avg <- wellbeing %>% 
+#   group_by(hh_ID) %>%
+#   summarise_at(vars(-submissiondate, -recall, -week_number), funs(mean(., na.rm=TRUE)))
+# wellbeing_avg <- transform(wellbeing_avg, satisfaction = rowMeans(wellbeing_avg[,-1], na.rm = TRUE))
+# 
+# wellbeing_avg <- wellbeing_avg %>% select(hh_ID, satisfaction)
+# 
+# housing_final_data <- merge(housing_all, wellbeing_avg, by = "hh_ID")
 
 ##################################################################################################################
 # FINAL DATAFRAME
 ##################################################################################################################
 # merge with respondent info
-final_df <- merge(housing_final_data, hh_respondent, by="hh_ID")
+final_df <- merge(housing_all, hh_respondent, by="hh_ID")
 
 # remove unnecessary variables
 final_df <- final_df %>% select(-totalCanCarry20L,-totalCanStandOwn,-totalCanWalk5Km)
@@ -827,7 +830,6 @@ final_df <- final_df[complete.cases(final_df),]
 
 # Food Diary
 ```{r}
-
 # Which of the following groups of foods were consumed by members of your household in the last ${recall_length} hours?
 # Scroll carefully down the list and select all that apply.
 
@@ -1263,7 +1265,7 @@ ifelse(fooddiary_count$food_name_type %in% c('fishlarge') & fooddiary_count$food
 head(fooddiary_count)
 summary(fooddiary_count$calories_total_grams)
 ```
-
+# Final HH and Food Data
 ```{r}
 # # all records without unit = 8 (counts)
 # fooddiary_nocounts <- fooddiary_cleaned %>% filter(food_type_unit != 8) %>% filter(recall=="week")
@@ -1445,7 +1447,7 @@ df <- df %>% select(hh_ID,
                                           canStandOwn,
                                           bmiCategory,
                                           isChild,
-                                            satisfaction,
+                                            #satisfaction,
                                             age,
                                             bmi,
                                             numChildren,
@@ -1491,27 +1493,19 @@ str(pca_data)
 ## Figure out dimensions of well-being using Factor Analysis
 
 http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/112-pca-principal-component-analysis-essentials/
-http://www.di.fc.ul.pt/~jpn/r/factoranalysis/factoranalysis.html#factor-analysis-vs.pca
 
 ```{r}
 res.pca <- PCA(pca_data, graph = FALSE)
 print(res.pca)
+summary(res.pca$eig)
 ```
-
 
 The eigenvalues measure the amount of variation retained by each principal component. Eigenvalues are large for the first PCs and small for the subsequent PCs. That is, the first PCs corresponds to the directions with the maximum amount of variation in the data set.
 
 Examine the eigenvalues to determine the number of principal components to be considered.
 ```{r}
 eig.val <- get_eigenvalue(res.pca)
-eig.val
 ```
-Q <- quantile(fooddiary_cleaned_week$calories_total_grams, probs=c(.25, .75), na.rm = FALSE)
-iqr <- IQR(fooddiary_cleaned_week$calories_total_grams)
-up <-  Q[2]+1.5*iqr # Upper Range  
-low<- Q[1]-1.5*iqr # Lower Range
-fooddiary_cleaned_week_no_outliers_cal <- subset(fooddiary_all, fooddiary_all$calories_total_grams > (Q[1] - 1.5*iqr) & fooddiary_all$calories_total_grams < (Q[2]+1.5*iqr))
-summary(fooddiary_cleaned_week_no_outliers_cal$calories_total_grams)nd contributions)
 
 var$coord: coordinates of variables to create a scatter plot
 var$cos2: represents the quality of representation for variables on the factor map. It’s calculated as the squared coordinates: var.cos2 = var.coord * var.coord.
@@ -1519,7 +1513,6 @@ var$contrib: contains the contributions (in percentage) of the variables to the 
 
 ```{r}
 var <- get_pca_var(res.pca)
-var
 ```
 ```{r}
 # Coordinates
@@ -1534,7 +1527,7 @@ head(var$contrib)
 # corrplot(var$cos2, is.corr=FALSE)
 
 # Total cos2 of variables on Dim.1 and Dim.2
-fviz_cos2(res.pca, choice = "var", axes = 1:2, top = 30)
+fviz_cos2(res.pca, choice = "var", axes = 1:2, top = 10)
 
 # Color by cos2 values: quality on the factor map
 fviz_pca_var(res.pca, col.var = "cos2",
@@ -1557,7 +1550,7 @@ fviz_contrib(res.pca, choice = "var", axes = 2, top = 15)
 
 ```{r}
 # total contribution to PC1 and PC2 
-fviz_contrib(res.pca, choice = "var", axes = 1:2, top = 20)
+fviz_contrib(res.pca, choice = "var", axes = 1:2, top = 10)
 ```
 
 The most important (or, contributing) variables can be highlighted on the correlation plot as follow:
@@ -1621,19 +1614,20 @@ fviz_contrib(res.pca, choice = "ind", axes = 1:2)
 https://rstudio-pubs-static.s3.amazonaws.com/376139_e9adaefdf4594a79a54a3f87ff4852d6.html
 
 ```{r}
-
+pca_data <- pca_data[complete.cases(pca_data),]
 ev <- eigen(cor(pca_data)) # get eigenvalues
 ap <- parallel(subject=nrow(pca_data),var=ncol(pca_data), rep=100, cent=.05)
 nS <- nScree(x=ev$values, aparallel=ap$eigen$qevpea)
 plotnScree(nS)
+parallel<-fa.parallel(pca_data, fm='minres', fa='fa') # 17-29?
 ```
 
 Optimal factor levels = 20.
 Oblique rotation (rotate = “oblimin”) as I believe that there is a correlation in the factors.
 Used `Ordinary Least Squared/Minres` factoring (fm = “minres”), as it is known to provide results similar to `Maximum Likelihood` without assuming a multivariate normal distribution and derives solutions through iterative eigendecomposition like a principal axis.
 ```{r}
-factor20 <- fa(pca_data,nfactors = 20,rotate = "oblimin",fm="minres")
-print(factor20)
+factor3 <- fa(pca_data,nfactors = 20,rotate = "oblimin",fm="minres")
+# print(factor12)
 ```
 
 A general rule of thumb is that if the absolute value of the standardized loading is greater than 0.3, the variable is relevant for the particular factor
@@ -1646,8 +1640,8 @@ options(max.print=1000000) # don't let rmd cut off results with max print defaul
 ```
 
 ```{r}
-fa.diagram(factor20)
-summary(factor20)
+# fa.diagram(factor3)
+summary(factor3)
 ```
 
 The root mean square of residuals (RMSR) is 0.04. This is acceptable as this value should be closer to 0. 
