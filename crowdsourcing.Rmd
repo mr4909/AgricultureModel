@@ -858,7 +858,9 @@ temp1 <- temp1 %>% mutate(age_rate = entries/total) %>% select(-total,-entries)
 mu_age_water <- mean(temp1$age_rate)
 mu_age_water
 
+######
 # sex
+######
 water_sex_avg <- merge(water_cs, respondent, by = "hh_ID")
 water_sex_avg <- water_sex_avg %>% select(hh_ID, hhm_sex, sex_cs)
 water_sex_avg <- water_sex_avg %>% mutate(sex_rate = ifelse(hhm_sex==sex_cs,1,0))
