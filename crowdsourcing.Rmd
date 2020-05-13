@@ -11,8 +11,8 @@ The purpose of this code is to test this out by examining how similar the purpos
 
 I hypothesize that individuals selected by respondents because they are friends, neighbors, or passersby, would tend to be similar in traits to the respondents and not provide the protection against selection bias that is proposed. 
 
-Bad Shocks, - no crowdsourcing info?
-Good Shocks, - no crowdsourcing info?
+Bad Shocks - no crowdsourcing info?
+Good Shocks - no crowdsourcing info?
 
 ```{r}
 respondent <- HouseholdComposition_members_level_2.dta %>%filter(hhm_relation == 1) %>% 
