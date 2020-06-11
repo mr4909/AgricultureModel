@@ -1,0 +1,1000 @@
+---
+title: "Food Reporting in Bagladesh"
+author: "Mari Roberts"
+date: "6/11/2020"
+output: pdf_document
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+##################################################################
+# load libraries, create custom functions, and import datasets 
+##################################################################
+
+# load necessary packages
+requiredPackages = c('foreign', # read dta
+                     'dplyr', # data manipulation
+                     'haven',
+                     'gridExtra', # data manipulation
+                     'readr', # read files
+                     'readxl',# read files
+                     'dummies', # PCA
+                     'lubridate', # data manipulation
+                     'data.table', # data manipulation
+                     'FactoMineR', # PCA
+                     'factoextra', # PCA
+                     'psych', # PCA
+                     'nFactors', # PCA
+                     'lattice', # plots
+                     'glmnet', # lasso
+                     'caret', # lasso
+                     'ggplot2', # plots
+                     'cluster', # clustering
+                     'Rtsne', # clustering
+                     'tidyverse') # missing values using map
+# only downloads packages if needed
+for(p in requiredPackages){
+  if(!require(p,character.only = TRUE)) install.packages(p)
+  library(p,character.only = TRUE)
+}
+
+# set wd
+mydirectory <- "/Users/mari/AgricultureModel/Datasets"
+setwd(mydirectory)
+
+filenames <- list.files(path=mydirectory, pattern=".*dta")
+
+# read in each dta file found in Dataset folder
+filenames <- list.files(path=mydirectory, pattern=".*dta")
+for (i in 1:length(filenames)){
+  assign(filenames[i], read_dta(paste("", filenames[i], sep=''))
+  )}
+
+# custom functions
+# remove outliers 
+outliers <- function(x){
+  quantiles <- quantile( x, c(.00, .95 ) )
+  x[ x < quantiles[1] ] <- quantiles[1]
+  x[ x > quantiles[2] ] <- quantiles[2]
+  x
+}
+```
+
+Files in github:  
+pca.Rmd: loads data, PCA  
+foodreporting.Rmd: this file, data cleaning, calorie intake, visualiztion  
+
+# Household Information
+
+After performing a PCA, the following were the most important factors for the first two components.
+
+maritalStatus,  
+occupationType (replace attending college with nonearning),  
+education,  
+age,  
+bmi,  
+sex (added in addition to PCA)  
+literacy,   
+cellphone (removed)  
+house_rooms_sleeping,   
+housefloor_material,   
+house_elec,  
+housewall_material,   
+lighting_source (removed)  
+defacation_public (removed)  
+
+```{r include=FALSE}
+# hh members
+hh_count <- HouseholdComposition_level_1.dta %>% select(hh_ID, member_1_ID, hh_members) 
+hh_count <- hh_count %>% distinct(hh_ID, .keep_all = TRUE)
+
+# household 
+hh1 <- HouseholdComposition_members_level_2.dta %>% mutate(height_meters = tot_height_inch*0.0254)
+# merge with hh_count
+hh <- merge(hh_count, hh1, by=c("hh_ID","member_1_ID"))
+
+# remove outliers for weight and height
+hh <- hh %>% filter(tot_height_inch >= 1 & tot_height_inch <= 100)
+hh <- hh %>% filter(weight_kg >= 1 & weight_kg <= 100)
+
+# bmi
+hh <- hh %>% mutate(bmi = (weight_kg/(height_meters^2)))
+# remove outliers for bmi
+hh <- hh %>% filter(bmi < 50)
+
+hh <- hh %>% mutate(sex = ifelse(hhm_sex == 1,0,1)) %>% 
+                       select(hh_ID,
+                              member_1_ID,
+                              member_2_ID,
+                              hh_members,
+                              currentposition,
+                              hhm_relation,
+                              sex,
+                              age = hhm_age,
+                              maritalStatus = marital_status,
+                              literacy,
+                              education,
+                              attendingCollege = hhm_attending,
+                              occupationType = hhm_occu_type,
+                              bmi)
+                              
+# change into factor variables
+hh$sex = factor(hh$sex)
+hh$maritalStatus = factor(hh$maritalStatus)
+hh$literacy = factor(hh$literacy)
+hh$education = factor(hh$education)
+hh$attendingCollege = factor(hh$attendingCollege)
+hh$occupationType = factor(hh$occupationType)
+
+####################################################
+# Respondent info and household members
+####################################################
+
+# data about respondents
+hh_respondent <- hh %>% filter(hhm_relation == 1)
+
+# remove variables
+hh_respondent <- hh_respondent %>% select(-member_1_ID,
+                                          -member_2_ID,
+                                          -currentposition,
+                                          -hhm_relation)
+
+head(hh_respondent)
+
+# fix attending college
+hh_respondent <- hh_respondent %>% 
+  mutate(occupation = case_when((occupationType=="farming") ~ "farming",
+                              (occupationType=="livestock") ~ "livestock",
+                              (occupationType=="nonearning" & attendingCollege==0) ~ "nonearning",
+                              (occupationType=="nonearning" & attendingCollege==1) ~ "attendingCollege",
+                              (occupationType=="prod") ~ "prod",
+                              (occupationType=="salaried") ~ "salaried",
+                              (occupationType=="self") ~ "self",
+                              (occupationType=="trader") ~ "trader",
+                              (occupationType=="wage") ~ "wage",
+                              (occupationType=="") ~ "NA"))
+hh_respondent <- hh_respondent %>% filter(occupationType != "NA") %>% select(-attendingCollege) # remove NAs
+hh_respondent <- hh_respondent %>% select(-occupationType)
+
+########################################
+# housing char
+########################################
+
+housing <- `41. HousingandSanitation.dta` 
+
+##########
+# if there is a hh_ID duplicate, use the first entry
+# question was only supposed to be answered once but some households submitted twice
+##########
+housing$submissiondate <- as.Date(housing$submissiondate, "%b %d, %Y")
+housing <- setDT(housing)[housing[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+housing <- housing %>% select(-submissiondate)
+# TRUE, if there are no duplicates in hh_ID
+length(unique(housing$hh_ID)) == nrow(housing)
+##########
+
+housing$lighting_source_type = as.factor(
+    ifelse(housing$lighting_source %in% c('1'),'electricity',
+        ifelse(housing$lighting_source %in% c('3'),'solar',
+        ifelse(housing$lighting_source %in% c('4'),'kerosine','other'))))
+
+housing$housefloor_material = as.factor(
+    ifelse(housing$housefloor_material %in% c('1'),
+        'concrete',
+        ifelse(housing$housefloor_material %in% c('2','3','5','99'),'other','mud'))
+)
+housing$houseroof_material = as.factor(
+    ifelse(housing$houseroof_material %in% c('2'), 'tin','other'))
+
+housing$housewall_material = as.factor(
+    ifelse(housing$housewall_material %in% c('1'),
+        'concrete',
+        ifelse(housing$housewall_material %in% c('3','4','5','8'),'other','tin'))
+)
+housing <- housing %>% select(hh_ID,
+                                  house_rooms_sleeping, 
+                                  housefloor_material, 
+                                  house_elec,
+                                  housewall_material)
+                                  #lighting_source)
+
+# select variables
+# latrine <- `87. latrineUse.dta` %>% select(hh_ID, submissiondate, use_lat, main_use, count_latrine, pct_open)
+# # pct_open  - too many factor levels (change to defacate or doesn't defacate in public)
+# latrine$defecation_public <- ifelse(grepl("1",latrine$pct_open), 1, 0)
+# latrine <- latrine %>% select(hh_ID, defecation_public)
+# 
+# final_data <- merge(housing, latrine, by = "hh_ID")
+
+# merge with respondent data
+final_data <- merge(housing, hh_respondent, by = "hh_ID")
+
+# factor variables
+final_data$house_elec <- as.factor(final_data$house_elec)
+final_data$occupation <- as.factor(final_data$occupation)
+```
+
+# Food Diary
+
+*Food Data:*  
+- Noncrowdsourced  
+- Recall period = week  
+- Calculated calories per food item(s) reported  
+- Calculated average calories (per hh member) per week by household  
+- Cleaned foods reported as counts (needs a second look)  
+- Standardized calories to calories per gram (needs a second look)   
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# select noncrowdsourced data and recall period of a week
+fooddiary_1 <- `33.FoodDiary_level_1.dta` %>% filter(crowdsource==0 & recall=="week")
+
+# select variables
+fooddiary_1 <- fooddiary_1 %>% select(hh_ID, 
+                                      food_1_ID,
+                                      submissiondate, 
+                                      recall, # month 516 season 272 week 4944
+                                      week_number, #3:50 weeks
+                                      food_list, # groups of foods consumed
+                                      food_count) # number of foods selected
+fooddiary_2 <- `34. FoodDiary_food_level_2.dta` %>% select(hh_ID, 
+                                      food_1_ID,
+                                      food_2_ID,
+                                      food_grp_namec, 
+                                      food_type) #will require grepl
+fooddiary_3 <- `35. Fooddiary_food_foodtype_level_3.dta` %>% select(hh_ID, 
+                                      food_2_ID,
+                                      food_3_ID,
+                                      food_ID = food_type_name, 
+                                      food_type_quant,
+                                      food_type_unit,
+                                      quant_pur, #How much consumed was purchased?
+                                      quant_own, #How much consumed was own production?
+                                      quant_other) #How much consumed was from other sources?
+
+# merge levels 1 and 2
+fooddiary_1_2 <- merge(fooddiary_1,fooddiary_2, by=c("hh_ID","food_1_ID"))
+
+# merge with level 3
+fooddiary_all <- merge(fooddiary_1_2,fooddiary_3, by=c("hh_ID","food_2_ID"))
+
+# remove unwanted variables
+fooddiary_all <- fooddiary_all %>% select(-food_type) # duplicate variable
+
+# 118 food_type_name are missing
+# remove missing values for now.
+fooddiary_all <- fooddiary_all[complete.cases(fooddiary_all),]
+
+# food names
+food_list <- read_csv("Datasets/food_list.csv") # names of food and ID number
+food_calories <- read_csv("Datasets/food_cal.csv") # names of food and calorie information 
+food_calories <- food_calories %>% mutate(food_name = food_type)  %>% 
+                                   select(-food_type)
+food_info <- merge(food_calories, food_list, by="food_name") # combine datasets together
+# write csv - use for later
+write.csv(food_info, "food_info.csv")
+
+##############################
+# CALORIES NEED TO BE FIXED
+##############################
+# Carbohydrates provide 4 calories per gram, protein provides 4 calories per gram, and fat provides 9 calories per gram
+# food_info <- food_info %>% filter(calorie_grams != 0)
+
+# merge with food list names 
+fooddiary_cleaned <- merge(food_info, fooddiary_all, by="food_ID")
+# select variables
+fooddiary_cleaned <- fooddiary_cleaned %>% select(hh_ID,
+                                                  submissiondate,
+                                                  recall,
+                                                  week_number,
+                                                  food_ID,
+                                                  food_count,
+                                                  food_name,
+                                                  food_name_type,
+                                                  food_type_quant,
+                                                  food_type_unit,
+                                                  quant_pur,
+                                                  quant_own,
+                                                  quant_other,
+                                                  food_1_ID,
+                                                  food_2_ID,
+                                                  food_3_ID)
+
+# calculate percent purchased, grown, other
+fooddiary_cleaned <- fooddiary_cleaned %>% mutate(quant_pur_pct = quant_pur/food_type_quant,
+                                                  quant_own_pct = quant_own/food_type_quant,
+                                                  quant_other_pct = quant_other/food_type_quant)
+
+# merge with food calories/info
+fooddiary_cleaned <- merge(fooddiary_cleaned, food_info, by=c("food_ID","food_name_type","food_name"))
+
+# reorder variables
+fooddiary_cleaned <- fooddiary_cleaned %>% select(hh_ID,
+                                                  submissiondate,
+                                                  recall,
+                                                  week_number,
+                                                  food_ID,
+                                                  food_count,
+                                                  food_name,
+                                                  food_name_type,
+                                                  food_type_quant,
+                                                  food_type_unit,
+                                                  calories_grams,
+                                                  quant_pur,
+                                                  quant_own,
+                                                  quant_other,
+                                                  quant_pur_pct,
+                                                  quant_own_pct,
+                                                  quant_other_pct,
+                                                  food_1_ID,
+                                                  food_2_ID,
+                                                  food_3_ID)
+
+# fix dates and times
+fooddiary_cleaned <- fooddiary_cleaned %>%
+  mutate(datetime = as.POSIXct(strptime(submissiondate, format = "%b %d, %Y %I:%M:%S %p")),
+         datetime_military = strftime(datetime, format = "%Y-%m-%d %H:%M"))
+
+# extract month
+fooddiary_cleaned$submission_month <- month(fooddiary_cleaned$datetime)
+# extract weekday
+fooddiary_cleaned$submission_weekday <- weekdays(fooddiary_cleaned$datetime)
+
+###################
+# *Food Type Unit* - need to be standardized
+###################
+# 1	Kg          *1000
+# 2	Grams
+# 3	Liter       *1000
+# 4	Milliliter  
+# 5	Tablespoon  *15
+# 6	Teaspoon    *4.2
+# 7	Drops       *0.05
+# 8	Count
+
+# unit conversions
+fooddiary_cleaned <- fooddiary_cleaned %>% 
+  mutate(calories_total_grams = case_when((food_type_unit==1) ~ calories_grams*(food_type_quant*1000),
+                                          (food_type_unit==2) ~ calories_grams*food_type_quant,
+                                          (food_type_unit==3) ~ calories_grams*(food_type_quant*1000),
+                                          (food_type_unit==4) ~ calories_grams*(food_type_quant), 
+                                          (food_type_unit==5) ~ calories_grams*food_type_quant,
+                                          (food_type_unit==6) ~ calories_grams*(food_type_quant*4.2),
+                                          (food_type_unit==7) ~ calories_grams*(food_type_quant*0.05)))
+
+# rearrange columns
+fooddiary_cleaned <- fooddiary_cleaned %>% select(hh_ID,
+                                                  submissiondate,
+                                                  recall,
+                                                  week_number,
+                                                  food_ID,
+                                                  food_count,
+                                                  food_name,
+                                                  food_name_type,
+                                                  food_type_quant,
+                                                  food_type_unit,
+                                                  calories_grams,
+                                                  calories_total_grams,
+                                                  quant_pur,
+                                                  quant_own,
+                                                  quant_other,
+                                                  quant_pur_pct,
+                                                  quant_own_pct,
+                                                  quant_other_pct,
+                                                  datetime,
+                                                  datetime_military,
+                                                  submission_month,
+                                                  submission_weekday,
+                                                  #time_of_day,
+                                                  food_1_ID,
+                                                  food_2_ID,
+                                                  food_3_ID)
+# head(fooddiary_cleaned)
+# 
+# summary(fooddiary_cleaned$calories_total_grams)
+
+    # Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+    #    0     1200     3000    17994     6000 12000000     2491 
+
+#####################################  
+## Fix Food Units Claimed As Counts
+#####################################
+
+# food unit type selected = 8
+fooddiary_count <- fooddiary_cleaned %>% filter(food_type_unit == 8) %>% arrange(desc(food_name_type))
+
+#########################################
+# fix outliers
+# If food type quant is more than 100 is meat 
+# or fish then change to grams which was likely the intention
+# convert to total calories reported in grams
+# this needs more work
+#########################################
+
+fooddiary_count$calories_total_grams = as.numeric(
+  
+ifelse(fooddiary_count$food_name_type %in% c('fishlarge') & fooddiary_count$food_type_quant > 100, 
+       fooddiary_count$calories_grams*fooddiary_count$food_type_quant,
+         
+         ifelse(fooddiary_count$food_name_type %in% c('fishsmall') & fooddiary_count$food_type_quant > 100, 
+                fooddiary_count$calories_grams*fooddiary_count$food_type_quant,
+                
+                ifelse(fooddiary_count$food_name_type %in% c('meategg') & fooddiary_count$food_type_quant > 100, 
+                       fooddiary_count$calories_grams*fooddiary_count$food_type_quant, 
+                       
+                       # grains (changed to kg)
+                       case_when(fooddiary_count$food_name=="Parboiled rice (coarse)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Fine rice" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Atta" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Non-parboiled rice (coarse)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Semai/noodles" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Chira (flattened rice)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Muri/Khoi (puffed rice)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 # meats (mostly changed to kg)
+                                 fooddiary_count$food_name=="Beef/buffalo" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Mutton" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Chicken" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Pigeon" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Fish egg" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant, # egg roe = 1g
+                                 fooddiary_count$food_name=="Egg" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*50, # egg = 50g
+                                 fooddiary_count$food_name=="Duck" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Stomach of beef/goat" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Dried meat" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Bids/bok/gughu" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Liver" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 # drinks/dairy (can = 340grams/12 fl oz)
+                                 fooddiary_count$food_name=="Tea –prepared" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340,
+                                 fooddiary_count$food_name=="Coke/ Seven-up etc/Pepci/RC/Urocola etc" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340,
+                                 fooddiary_count$food_name=="Milk" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340,
+                                 fooddiary_count$food_name=="Milk in Tea" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340,
+                                 fooddiary_count$food_name=="Powdered Milk" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*35,# serving of powdered milk
+                                 fooddiary_count$food_name=="Condensed Milk" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340,
+                                 fooddiary_count$food_name=="Butter" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*113, # serving of butter
+                                 fooddiary_count$food_name=="Yogurt" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340,
+                                 fooddiary_count$food_name=="Cottage cheese or Paneer" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340, 
+                                 fooddiary_count$food_name=="Buttermilk" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340, 
+                                 fooddiary_count$food_name=="Solid Cheese Curds" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340, 
+                                 fooddiary_count$food_name=="Ice Cream" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340,
+                                 fooddiary_count$food_name=="Ice cream" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*340,
+                                 # fish small (avg  serving size 170)
+                                 # some gura mach in 500 for quantity.....fix later???????
+                                 fooddiary_count$food_name=="Gura mach" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*170,
+                                 fooddiary_count$food_name=="Panch mishali" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*170,
+                                 fooddiary_count$food_name=="Palshe" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*170,
+                                 fooddiary_count$food_name=="Tatkeni" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*170,
+                                 fooddiary_count$food_name=="Puti" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*170,
+                                 fooddiary_count$food_name=="Tengra" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*170,
+                                 fooddiary_count$food_name=="Karfu fish" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*170,
+                                 fooddiary_count$food_name=="Bata" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*170,
+                                 fooddiary_count$food_name=="Kajari" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*170,
+                                 fooddiary_count$food_name=="Small prawn" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*3,
+                                 fooddiary_count$food_name=="Dried small shrimp/prawn" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*3,
+                                 # pulses (avg serving size and average size (nuts))
+                                 fooddiary_count$food_name=="Khesari" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*160,
+                                 fooddiary_count$food_name=="Dried Lentil" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*160,
+                                 fooddiary_count$food_name=="Shem bitchi" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*160,
+                                 fooddiary_count$food_name=="Anchor daal" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*160,
+                                 fooddiary_count$food_name=="Dried Chick pea" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*160,
+                                 fooddiary_count$food_name=="Mung" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*160,
+                                 fooddiary_count$food_name=="Black gram" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*160,
+                                 fooddiary_count$food_name=="Dried Pea" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*160,
+                                 fooddiary_count$food_name=="Groundnut" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Brazilnut" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Cashew Nut" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Almond/Badam" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Hazelnut" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Chestnut" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 # fix vegetables (avg serving size per item)
+                                 fooddiary_count$food_name=="Patal" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Okra" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Eggplant" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*141,
+                                 fooddiary_count$food_name=="Bitter gourd" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*125,
+                                 fooddiary_count$food_name=="Radish" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*4.5,
+                                 fooddiary_count$food_name=="Pumpkin" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*5000,
+                                 fooddiary_count$food_name=="Green chili" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*45,
+                                 fooddiary_count$food_name=="Potato" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*200,
+                                 fooddiary_count$food_name=="Sweet potato" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*200,
+                                 fooddiary_count$food_name=="Sheem" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100, # broad bean
+                                 fooddiary_count$food_name=="Onion" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*150,
+                                 fooddiary_count$food_name=="Tomato" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*40,
+                                 fooddiary_count$food_name=="Sweet gourd" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*500,
+                                 fooddiary_count$food_name=="Garlic" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*13,
+                                 fooddiary_count$food_name=="Water gourd" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*145,
+                                 fooddiary_count$food_name=="Drum stick" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100, # 26 cal / moringa
+                                 fooddiary_count$food_name=="Carrot" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*70,
+                                 fooddiary_count$food_name=="Green banana" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*30,
+                                 fooddiary_count$food_name=="Cauliflower" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*550,
+                                 fooddiary_count$food_name=="Danta (amaranth)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*45, # 170 cal
+                                 fooddiary_count$food_name=="Green Papaya"~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*680,
+                                 fooddiary_count$food_name=="Ash gourd" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*8000,
+                                 fooddiary_count$food_name=="Cucumber" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*25,
+                                 fooddiary_count$food_name=="Kachu (arum)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100, # 112 cal
+                                 fooddiary_count$food_name=="Green mango" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*150,
+                                 fooddiary_count$food_name=="Dhundal" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Kachur lati" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Green pea" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*18,
+                                 fooddiary_count$food_name=="Green jackfruit" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*7937,
+                                 fooddiary_count$food_name=="Mete alu" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*150,
+                                 fooddiary_count$food_name=="Kakrol" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100, #spiny gourd
+                                 fooddiary_count$food_name=="Soybean bori" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Beher gura" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100, # couldnt find
+                                 fooddiary_count$food_name=="Shalgom" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*4.5, # turnip, couldnt find
+                                 # fish large (avg large fish calorie count 1000)
+                                 fooddiary_count$food_name=="Rui" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Telapia" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Swarputi" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Singi" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Grass Carp" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Taki" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Pangash" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Silver Carp" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Mrigel" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Kalibaus" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Hilsa" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Katla" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Jatka" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Aair" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Boal" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Dried fish" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 fooddiary_count$food_name=="Mirror Carp" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*1000,
+                                 # spices (avg calorie count 5)
+                                 fooddiary_count$food_name=="Dried chili" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*5,
+                                 fooddiary_count$food_name=="Elachi" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*5,
+                                 fooddiary_count$food_name=="Cinnamon" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*5,
+                                 fooddiary_count$food_name=="Fresh Ginger" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*5,
+                                 # other food (average serving size)
+                                 fooddiary_count$food_name=="Pitha" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Ruti/Parota" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Singara" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Rice/Jao" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Piaju" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Cake" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Nimki" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Puri" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Alur chap" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Biscuit" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Bonroti/paoroti" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Khichuri" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Polao/Biryani/Tehari" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Chips" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Patties" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Chewing gum" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,                                               
+                                 # vegetables (average serving size of 1 cup/128 grams)
+                                 fooddiary_count$food_name=="Lal Shak (red amaranth)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Bathua" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Pat Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Dheki Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Pui (Indian spinach)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Dhania Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Lau Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Onion/garlic stalk" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Kalmi Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Radish leaves" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Kachu Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Kalo kachu Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Cabbage" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Helencha" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Katanate" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Palang Shak (spinach)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Pea leaves" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Drumstick leaves" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Mustard leaves" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Mixed leafy vegetables" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Dudhali Pata" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Khesari Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Swett gourd leaves" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Black gram leaves" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Geema Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Neem Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Darkuni Shak" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Bokful" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 fooddiary_count$food_name=="Litchis" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*128,
+                                 # oil (serving size 15m)  
+                                 fooddiary_count$food_name=="Soybean" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*15,
+                                 fooddiary_count$food_name=="Mustard" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*15,
+                                 fooddiary_count$food_name=="Dalda/banspati" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*15,
+                                 fooddiary_count$food_name=="Red Palm Oil" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*15,
+                                 fooddiary_count$food_name=="Ghee" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*15,
+                                 fooddiary_count$food_name=="Sesame oil" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*15, 
+                                 fooddiary_count$food_name=="Yellow Palm Oil" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*15,
+                                 # fruit(avg serving size) 
+                                 fooddiary_count$food_name=="Apple" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Mango" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Guava" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Banana" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Lemon" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Karambola" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Grapes" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Dates" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Jujube/dried jujube" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Coconut" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Orange" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Bel" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Tamarind" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Olive" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Chalta" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Pomelo" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Jack Fruit" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Pomelo" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Amra" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Papaya" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Black berry" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Green Coconut" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Dalim" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Tarmuj (Water melon)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Ata (bullock's heart)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Bangi (Musk melon)" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Pine apple" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Sobeda" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100,
+                                 fooddiary_count$food_name=="Jaamrul" ~ fooddiary_count$calories_grams*fooddiary_count$food_type_quant*100)))))
+
+# view data
+# summary(fooddiary_count$calories_total_grams)
+
+################################################
+# FINAL FOOD DIARY DATAFRAME
+# Each food item with calorie info including foods with food type unit = “count”.
+# removed outliers
+################################################
+# merge fooddiary_count (unit = 8) and other dataset fooddiary_count to get complete df
+fooddiary_nocounts <- fooddiary_cleaned %>% filter(food_type_unit != 8)
+fooddiary_all <- rbind(fooddiary_nocounts, fooddiary_count)
+
+# remove missing data 
+fooddiary_all <- fooddiary_all[complete.cases(fooddiary_all),]
+
+# remove outliers with custom outliers function (found at top of code)
+fooddiary_all$calories_total_grams <- outliers(fooddiary_all$calories_total_grams)
+
+# only use recall times of a week
+fooddiary_all_week <- fooddiary_all %>% filter(recall=="week")
+```
+
+## Explore Food Data
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# jpeg("food_types_reported.jpg") # save jpeg of graph
+p1 <- fooddiary_all_week %>%
+  filter(recall=="week") %>%
+  ggplot(aes(food_name_type)) +
+      geom_bar(fill = "darkorchid4") +
+      facet_wrap( ~ submission_month, ncol = 4) +
+      labs(title = "Food Types Reported by Month",
+           subtitle = " ",
+           y = "count",
+           x = "food group") + theme_bw(base_size = 15)
+p1 + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+# dev.off()
+```
+
+Food Groups Reported:  
+
+       cereals          dairy         drinks      fishlarge      fishsmall 
+          3435            277            128           1051            857 
+        fruits       leafyveg        meategg            oil otherfoodohome 
+           590           1469           2021           1262            221 
+        pulses         spices     vegetables 
+          1430            801           5561 
+          
+Bangladesh has three rice seasons, the aus, aman, and boro. The aus season rice crop is planted during March-April and harvested during June-July. The aman season rice is planted in June-July and harvested during November-December. The boro season rice is planted in December-January and harvested during May-June.  
+
+## Data Visualization
+```{r fig2, echo=FALSE, fig.height=3.5, fig.width=3.5, message=FALSE, warning=FALSE, paged.print=FALSE}
+############################################
+# look at specific food groups reported by week
+############################################
+
+# all food groups in one graph
+ggplot(fooddiary_all_week, aes(x=week_number, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  labs(title="Foods Reported",x="Week Number", y = "Count")+ theme(legend.position="top")
+```
+
+```{r fig3, echo=FALSE, fig.height=3.5, fig.width=3.5, message=FALSE, warning=FALSE, paged.print=FALSE}
+# graphs for each food group
+meat <- fooddiary_all_week %>% filter(food_name_type == "meategg")
+ggplot(meat, aes(x=week_number, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  labs(title="Meat Reported",x="Week Number", y = "Count") + theme(legend.position = "none")
+
+cereals <- fooddiary_all_week %>% filter(food_name_type == "cereals")
+ggplot(cereals, aes(x=week_number, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  labs(title="Cereals Reported",x="Week Number", y = "Count")+ theme(legend.position = "none")
+
+pulses <- fooddiary_all_week %>% filter(food_name_type == "pulses")
+ggplot(pulses, aes(x=week_number, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  labs(title="Pulses Reported",x="Week Number", y = "Count")+ theme(legend.position = "none")
+
+leafyveg <- fooddiary_all_week %>% filter(food_name_type == "leafyveg")
+ggplot(leafyveg, aes(x=week_number, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  labs(title="Leafy Veg Reported",x="Week Number", y = "Count")+ theme(legend.position = "none")
+
+fruits <- fooddiary_all_week %>% filter(food_name_type == "fruits")
+ggplot(fruits, aes(x=week_number, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  labs(title="Fruits Reported",x="Week Number", y = "Count")+ theme(legend.position = "none")
+
+vegetables <- fooddiary_all_week %>% filter(food_name_type == "vegetables")
+ggplot(vegetables, aes(x=week_number, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  labs(title="Vegetables Reported",x="Week Number", y = "Count")+ theme(legend.position = "none")
+
+dairy <- fooddiary_all_week %>% filter(food_name_type == "dairy")
+ggplot(dairy, aes(x=week_number, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  labs(title="Dairy Reported",x="Week Number", y = "Count")+ theme(legend.position = "none")
+
+spices <- fooddiary_all_week %>% filter(food_name_type == "spices")
+ggplot(spices, aes(x=week_number, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  labs(title="Spices Reported",x="Week Number", y = "Count")+ theme(legend.position = "none")
+
+oil <- fooddiary_all_week %>% filter(food_name_type == "oil")
+ggplot(oil, aes(x=week_number, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  labs(title="Oil Reported",x="Week Number", y = "Count")+ theme(legend.position = "none")
+```
+
+## Find avg calories per person in each household
+
+```{r include=FALSE}
+############################################
+# find average calories by household
+############################################
+calories <- fooddiary_all_week %>% group_by(hh_ID, week_number) %>% tally(calories_total_grams)
+calories <- calories %>% mutate(hh_calories_total = n) %>% select(-n)
+
+df_calorie_avg <- merge(calories, hh_count, by = "hh_ID")
+
+df_calorie_avg <- df_calorie_avg %>% mutate(avg_calories_member = hh_calories_total/hh_members) 
+
+# create dataframe for graphs
+df_food_basic1 <- df_calorie_avg %>% select(hh_ID, week_number, avg_calories_member)
+
+# remove outliers with custom outliers function (found at top of code)
+df_food_basic1$avg_calories_member <- outliers(df_food_basic1$avg_calories_member)
+```
+
+The following graphs show the variation in calories reported by households over time. There's an overall decrease and most report under 5000 calories per household member per week.  
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+ggplot(df_food_basic1, aes(x = week_number, y = avg_calories_member)) +
+    geom_point(aes(color = hh_ID),size = .9) + 
+  labs(title = "Average Weekly Calorie Intake", x = "Week Number", y = "Calories")
+
+# Change stripchart colors by groups
+p<-ggplot(df_food_basic1, aes(x=avg_calories_member)) 
+p+ geom_histogram() + 
+  labs(title = "Average Weekly Calorie Intake", x = "Calories", y = "Count")
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+##########################################################
+# merge with food data (weekly averages per household member) and household information
+##########################################################
+final_data_food <- merge(final_data, df_food_basic1, by = "hh_ID")
+
+# count number of times a household reported
+final_data_food$count <- 1
+count <- final_data_food %>% group_by(hh_ID) %>% tally(count)
+count <- count %>% mutate(reportCount = n) %>% select(hh_ID, reportCount)
+final_data_food <- merge(final_data_food, count, by = "hh_ID")
+final_data_food <- final_data_food %>% select(-count)
+str(final_data_food)
+```
+
+## Clustering
+https://www.r-bloggers.com/clustering-mixed-data-types-in-r
+
+Partitioning around medoids (PAM) is an iterative clustering procedure with the following steps:  
+ 
+- Choose k random entities to become the medoids  
+- Assign every entity to its closest medoid (using our custom distance matrix in this case)  
+- For each cluster, identify the observation that would yield the lowest average distance if it were to be re-assigned as the medoid. If so, make this observation the new medoid.  
+- If at least one medoid has changed, return to step 2. Otherwise, end the algorithm.  
+- If you know the k-means algorithm, this might look very familiar. In fact, both approaches are identical, except k-means has cluster centers defined by Euclidean distance (i.e., centroids), while cluster centers for PAM are restricted to be the observations themselves (i.e., medoids).  
+
+Pros: Easy to understand, more robust to noise and outliers when compared to k-means, and has the added benefit of having an observation serve as the exemplar for each cluster.  
+Another benefit of the PAM algorithm with respect to interpretation is that the medoids serve as exemplars of each cluster.  
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# remove calories, week number, and number of reports in order to find clusters of households by household information
+df <- final_data_food %>% select(-avg_calories_member, -week_number)
+# remove NAs
+df <- na.omit(df)
+# check duplicates
+# df$hh_ID[duplicated(df$hh_ID)]
+# remove duplicates
+df <- df %>% distinct()
+# remove inconsistencies
+# 116180 had 70 reports, multple reports per week
+# 110111 & 230347 reported more than once a week
+df <- df %>% filter(hh_ID != 110111 & hh_ID != 230347 & hh_ID != 240476 & hh_ID != "116180")  
+# remove hh_ID for analysis
+df_nohhID <- df %>% select(-hh_ID, -reportCount)
+
+# compute Gower distance
+gower_dist <- daisy(df_nohhID, metric = "gower")
+gower_mat <- as.matrix(gower_dist)
+
+# print most similar households
+# df_nohhID[which(gower_mat == min(gower_mat[gower_mat != min(gower_mat)]), arr.ind = TRUE)[1, ], ]
+# options(max.print=1000000) # don't let rmd cut off results with max print default
+# 
+# print most dissimilar households
+# df_nohhID[which(gower_mat == max(gower_mat[gower_mat != max(gower_mat)]), arr.ind = TRUE)[1, ], ]
+# options(max.print=1000000) # don't let rmd cut off results with max print default
+
+# identify number of clusters (2-8)
+sil_width <- c(NA)
+for(i in 2:8){  
+  pam_fit <- pam(gower_dist, diss = TRUE, k = i)  
+  sil_width[i] <- pam_fit$silinfo$avg.width  
+}
+plot(1:8, sil_width,
+     xlab = "Number of clusters",
+     ylab = "Silhouette Width")
+lines(1:8, sil_width)
+
+k <- 3 # number of clusters
+pam_fit <- pam(gower_dist, diss = TRUE, k)
+pam_results <- df %>%
+  mutate(cluster = pam_fit$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary = summary(.))
+pam_results$the_summary
+```
+
+3 clusters looks good.
+
+*Cluster 1: OLDER, MARRIED/UNMARRIED, FARMERS, HOUSING IS CONCRETE*  
+age 34.27  
+married  
+farming/trader  
+education 2 = some primary or secondary school  
+housing matrerials are concrete  
+low reporting  
+normal weight  
+
+*Cluster 2: YOUNG, UNMARRIED, ATTENDING COLLEGE, HOUSING NOT CONCRETE*  
+age = 22.33  
+unmarried  
+attending college  
+education 3 = some college  
+housing materials are mud or tin  
+mid reporting  
+underweight  
+
+*Cluster 3: OLDER, MARRIED, FARMERS, HOUSING NOT CONCRETE*  
+age = 35.18  
+married  
+farming  
+education 2 = some primary or secondary school  
+housing materials are mud or tin/other  
+high reporting  
+normal weight  
+
+
+*Households used as mediods:*  
+```{r echo=FALSE}
+df[pam_fit$medoids,]
+```
+
+### Clusters
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+tsne_obj <- Rtsne(gower_dist, is_distance = TRUE)
+
+tsne_data <- tsne_obj$Y %>%
+  data.frame() %>%
+  setNames(c("X", "Y")) %>%
+  mutate(cluster = factor(pam_fit$clustering),
+         hh_ID = df$hh_ID)
+
+ggplot(aes(x = X, y = Y), data = tsne_data) +
+  geom_point(aes(color = cluster))
+
+## Compare Clusters Visually
+# subset data by cluster
+tsne_data <- merge(tsne_data, count, by = "hh_ID")
+cluster1 <- tsne_data %>% filter(cluster == 1) %>% select(hh_ID)
+cluster1 <- merge(cluster1, final_data_food, by = "hh_ID")
+cluster2 <- tsne_data %>% filter(cluster == 2) %>% select(hh_ID)
+cluster2 <- merge(cluster2, final_data_food, by = "hh_ID")
+cluster3 <- tsne_data %>% filter(cluster == 3) %>% select(hh_ID)
+cluster3 <- merge(cluster3, final_data_food, by = "hh_ID")
+
+# data with all clusters
+tsne_data_clusters <- merge(tsne_data, final_data_food,by = "hh_ID")
+tsne_data_clusters <- tsne_data_clusters %>% select(-avg_calories_member, -week_number)
+tsne_data_clusters <- tsne_data_clusters %>% distinct()
+
+# graph of cluster 1
+# ggplot(cluster1, aes(week_number, avg_calories_member)) +
+#            geom_point(na.rm=TRUE)+
+#     ggtitle("Cluster 1: Calories Reported by Week")
+# # graph of cluster 2
+# ggplot(cluster2, aes(week_number, avg_calories_member)) +
+#            geom_point(na.rm=TRUE)+
+#     ggtitle("Cluster 2: Calories Reported by Week")
+# # graph of cluster 3
+# ggplot(cluster3, aes(week_number, avg_calories_member)) +
+#            geom_point(na.rm=TRUE)+
+#     ggtitle("Cluster 3: Calories Reported by Week")
+
+# plot 
+# graph of cluster 1
+p <- ggplot(cluster1, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Cluster 1: Calories Reported by Week") +
+    xlab("Week Number") + ylab("Calories Per HH Member")
+p
+
+# graph of cluster 2
+p <- ggplot(cluster2, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Cluster 2: Calories Reported by Week") +
+    xlab("Week Number") + ylab("Calories Per HH Member") 
+p
+
+# graph of cluster 3
+p <- ggplot(cluster3, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Cluster 3: Calories Reported by Week") +
+    xlab("Week Number") + ylab("Calories Per HH Member") 
+p
+```
+
+*Below are the average calories reported by the mediod household for each of the 3 clusters*
+You can see that this reflects the descriptions of the clusters mentioned before.  That cluster 3 has the highest reporting.  
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+# look at medoid for cluster 1
+temp <- final_data_food %>% filter(hh_ID == 113139)
+p <- ggplot(temp, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Calories for HH 113139 (cluster 1)") +
+    xlab("Week Number") + ylab("Calories Per HH Member") 
+p
+
+# look at medoid for cluster 2
+temp <- final_data_food %>% filter(hh_ID == 225289)
+p <- ggplot(temp, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Calories for HH 225289 (cluster 2)") +
+    xlab("Week Number") + ylab("Calories Per HH Member") 
+p
+
+# look at medoid for cluster 3
+temp <- final_data_food %>% filter(hh_ID == 221249)
+p <- ggplot(temp, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Calories for HH 221249 (cluster 3)") +
+    xlab("Week Number") + ylab("Calories Per HH Member") 
+p
+```
+
+```{r eval=FALSE, include=FALSE}
+# number of times a hh reported calories - compare clusters
+# Overlaid histograms
+# line below doesnt work in knitr - bug?
+# mu <- plyr::ddply(tsne_data_clusters, "cluster", summarise, grp.mean=mean(reportCount))
+# 	1 23.82927
+#   2	21.75000
+#   3	20.69697
+# cluster <- c(1,2,3)
+# grp.mean <- c(23.82927, 21.75000, 20.69697)
+# mu <- data_frame(cluster, grp.mean)
+# # temp <- tsne_data_clusters %>% select(hh_ID, cluster, reportCount)
+# # p<-ggplot(temp, aes(x=reportCount, color=cluster)) +
+# #   geom_histogram(fill="white", position="dodge")+
+# #   theme(legend.position="top")
+# # mu
+# # p
+# mu 
+# 
+# ![](clusterplot.png)
+```
+
+# Additional References
+http://wavedatalab.github.io/machinelearningwithr/post4.html  
+https://datasciencebeginners.com/2018/11/26/functions-and-packages-for-feature-selection-in-r/  
