@@ -217,6 +217,7 @@ length(unique(housing_all$hh_ID)) == nrow(housing_all)
 
 # respondent input year instead of years old
 # determine house age
+
 housing_fix_year <- housing_all %>% arrange(desc(house_old))
 housing_fix_year <- head(housing_fix_year, 19)
 housing_fix_year <- housing_fix_year %>% select(hh_ID, house_old, today)
@@ -611,10 +612,10 @@ head(plots)
 
 # merge with housing
 housing_all <- merge(housing_all, plots, by="hh_ID")
-```
 
-Don't need info below for now. Information by specific plot. 
-```{r}
+
+#Don't need info below for now. Information by specific plot. 
+
 # ########################
 # # who_owns - too many factor levels (change to three types)
 # ########################
@@ -789,21 +790,21 @@ Don't need info below for now. Information by specific plot.
 # 
 # # no duplicates
 # plots$hh_ID[duplicated(plots$hh_ID)]
-```
+
 
 ##Subjective Wellbeing and Final HH Dataset
-```{r}
+
 ####################################################
 # Subjective Wellbeing
 ####################################################
 
-# Which step of ladder (scale of 0 to 10) do you feel you stand at present?
-# wellbeing <- `69. SubjectiveWellbeing.dta` %>% select(hh_ID, submissiondate, recall, week_number, 
-#                                   g1_satisfied, g2_satisfied, g3_satisfied, 
+# # Which step of ladder (scale of 0 to 10) do you feel you stand at present?
+# wellbeing <- `69. SubjectiveWellbeing.dta` %>% select(hh_ID, submissiondate, recall, week_number,
+#                                   g1_satisfied, g2_satisfied, g3_satisfied,
 #                                   g4_satisfied, g5_satisfied)
 # 
 # # find satisfaction average
-# wellbeing_avg <- wellbeing %>% 
+# wellbeing_avg <- wellbeing %>%
 #   group_by(hh_ID) %>%
 #   summarise_at(vars(-submissiondate, -recall, -week_number), funs(mean(., na.rm=TRUE)))
 # wellbeing_avg <- transform(wellbeing_avg, satisfaction = rowMeans(wellbeing_avg[,-1], na.rm = TRUE))
@@ -981,7 +982,7 @@ fooddiary_cleaned$submission_weekday <- weekdays(fooddiary_cleaned$datetime)
 # 1	Kg          *1000
 # 2	Grams
 # 3	Liter       *1000
-# 4	Milliliter  /1000
+# 4	Milliliter  /1000  #### fix grams
 # 5	Tablespoon  *15
 # 6	Teaspoon    *4.2
 # 7	Drops       *0.05
@@ -992,7 +993,7 @@ fooddiary_cleaned <- fooddiary_cleaned %>%
   mutate(calories_total_grams = case_when((food_type_unit==1) ~ calories_grams*(food_type_quant*1000),
                                           (food_type_unit==2) ~ calories_grams*food_type_quant,
                                           (food_type_unit==3) ~ calories_grams*(food_type_quant*1000),
-                                          (food_type_unit==4) ~ calories_grams*(food_type_quant/1000),
+                                          (food_type_unit==4) ~ calories_grams*(food_type_quant/1000), # fix
                                           (food_type_unit==5) ~ calories_grams*food_type_quant,
                                           (food_type_unit==6) ~ calories_grams*(food_type_quant*4.2),
                                           (food_type_unit==7) ~ calories_grams*(food_type_quant*0.05)))
@@ -1029,6 +1030,9 @@ head(fooddiary_cleaned)
 summary(fooddiary_cleaned$calories_total_grams)
 ```
 
+    Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
+       0     1200     3000    17994     6000 12000000     2491 
+       
 ## Fix Food Units Claimed As Counts
 ```{r}
 
@@ -1265,6 +1269,10 @@ ifelse(fooddiary_count$food_name_type %in% c('fishlarge') & fooddiary_count$food
 head(fooddiary_count)
 summary(fooddiary_count$calories_total_grams)
 ```
+
+Min.   1st Qu.    Median      Mean   3rd Qu.      Max.      NA's 
+0.000e+00 7.680e+02 2.000e+03 1.895e+08 6.000e+03 4.701e+11        10 
+
 # Final HH and Food Data
 ```{r}
 # # all records without unit = 8 (counts)
@@ -1299,6 +1307,9 @@ summary(fooddiary_all$calories_total_grams)
 names(fooddiary_all)
 ```
 
+Min.   1st Qu.    Median      Mean   3rd Qu.      Max. 
+    0.001  1000.000  3000.000  4890.645  6000.000 20000.000
+    
 ## Explore Food Data
 
 ```{r fig1, fig.height = 3.5, fig.width = 3.5}
@@ -1422,7 +1433,7 @@ df <- df %>% select(hh_ID,
                                           visits_bazaar,
                                           visits_localshop,
                                           business,
-                                          use_lat,
+                                          #use_lat,
                                           main_use_flush,
                                           defecation_public,
                                           house_sharing,
@@ -1498,6 +1509,8 @@ http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practi
 res.pca <- PCA(pca_data, graph = FALSE)
 print(res.pca)
 summary(res.pca$eig)
+
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 10))
 ```
 
 The eigenvalues measure the amount of variation retained by each principal component. Eigenvalues are large for the first PCs and small for the subsequent PCs. That is, the first PCs corresponds to the directions with the maximum amount of variation in the data set.
@@ -1505,16 +1518,10 @@ The eigenvalues measure the amount of variation retained by each principal compo
 Examine the eigenvalues to determine the number of principal components to be considered.
 ```{r}
 eig.val <- get_eigenvalue(res.pca)
-```
+eig.val
 
-var$coord: coordinates of variables to create a scatter plot
-var$cos2: represents the quality of representation for variables on the factor map. It’s calculated as the squared coordinates: var.cos2 = var.coord * var.coord.
-var$contrib: contains the contributions (in percentage) of the variables to the principal components. The contribution of a variable (var) to a given principal component is (in percentage) : (var.cos2 * 100) / (total cos2 of the component).
-
-```{r}
 var <- get_pca_var(res.pca)
-```
-```{r}
+
 # Coordinates
 head(var$coord)
 # Cos2: quality on the factore map
@@ -1559,7 +1566,7 @@ fviz_pca_var(res.pca, col.var = "contrib",
              gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
 ```
 
-*Clustering*
+#*Clustering*
 ```{r}
 # Create a grouping variable using kmeans
 # Create 3 groups of variables (centers = 3)
@@ -1580,6 +1587,8 @@ res.desc$Dim.1
 
 # Description of dimension 2
 res.desc$Dim.2
+
+res.desc
 ```
 
 ```{r}
@@ -1622,11 +1631,11 @@ plotnScree(nS)
 parallel<-fa.parallel(pca_data, fm='minres', fa='fa') # 17-29?
 ```
 
-Optimal factor levels = 20.
+Optimal factor levels = 18.
 Oblique rotation (rotate = “oblimin”) as I believe that there is a correlation in the factors.
 Used `Ordinary Least Squared/Minres` factoring (fm = “minres”), as it is known to provide results similar to `Maximum Likelihood` without assuming a multivariate normal distribution and derives solutions through iterative eigendecomposition like a principal axis.
 ```{r}
-factor3 <- fa(pca_data,nfactors = 20,rotate = "oblimin",fm="minres")
+factor3 <- fa(pca_data,nfactors =18,rotate = "oblimin",fm="minres")
 # print(factor12)
 ```
 
@@ -1635,13 +1644,15 @@ A general rule of thumb is that if the absolute value of the standardized loadin
 ```{r}
 #  consider the loadings more than 0.3 and not loading on more than one factor
 # negative values are acceptable
-print(factor20$loadings,cutoff = 0.4)
+print(factor3$loadings,cutoff = 0.4)
 options(max.print=1000000) # don't let rmd cut off results with max print default
 ```
 
 ```{r}
 # fa.diagram(factor3)
-summary(factor3)
+summary(factor3) # fa(r = pca_data, nfactors = 20, rotate = "oblimin", fm = "minres")
+
+summary(Efa5) # fa(r = pca_data, nfactors = 20, rotate = "oblimin", fm = "minres")
 ```
 
 The root mean square of residuals (RMSR) is 0.04. This is acceptable as this value should be closer to 0. 
@@ -1698,10 +1709,65 @@ fviz_cluster(km.res, data = pca_data,
              )
 ```
 
+# Factor Analysis: Second Attempt
+
+```{r}
+#################################
+## Exploratory Factor Analysis ##
+#################################
+
+### Step 1: Examining the Correlation Matrix (Supplmental Material Section 1) ###
+
+# An EFA explores the relationship between variables, so it can be useful to examine a correlation matrix of all
+# of the possible items to identify what relationships between the items may exist. The code below creates this
+# correlation matrix. To account for missing data we chose to build this matrix based on pairwise complete
+# observations. Pairwise complete observations uses all pairs available for a correlation, regardless of whether
+# or not there are responses to the other observed items. We chose this option because of the small amount of
+# missing data in the observed responses (< 5%) and because the analysis is exploratory in nature. Using a
+# more complex missing data technique would not necessarily improve the quality of the data for the purposes
+# of an exploratory analysis.
+
+# Calculating correlation matrix based on pairwise complete observations
+test <- pca_data
+efa_cormat <- round(cor(test, use="pairwise.complete.obs"),3)
+
+# Display the correlation matrix
+
+efa_cormat
+
+# The 'corrplot' package re-orders the items and colors the strength of the correlations to make clusters of
+# items more apparent.
+
+corrplot((efa_cormat), order = "hclust", tl.col='black', tl.cex=.75)
+
+### Step 2: Determining the number of factors to look for in the EFA (6.6.3) ###
+
+# In an EFA, the user has to specificy how many factors (dimensions) the program should try to model. There
+# are multiple methods to do this that return both as visual representations and suggested number of factors
+# using multiple tests.
+
+# Visual representation of dimensionality using scree plot and parallel analysis
+
+fa.parallel(test, fm = 'pa')
+
+### Step 3: Specifying the EFA Model (Section 6.6)###
+
+# Below the syntax examines the correlation matrix that we created above. We extract 5 factors, as we wanted
+# to examine the most complex solution first. We use an oblimin rotation ("oblimin") that allows our latent factors to be
+# correlated, and we also use a principal axis solution ("pa") as our factoring method. The solution is saved to the R
+# object "Efa5."
+
+Efa5 <- fa(r = efa_cormat, nfactors = 17,
+           rotate = "oblimin", fm = "minres",
+           max.iter = 500)
+Efa5
 
 
+print(Efa5$loadings,cutoff = 0.5)
+options(max.print=1000000) # don't let rmd cut off results with max print default
 
 
+```
 
 # Notes
 Responses in food diary:
