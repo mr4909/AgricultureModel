@@ -1,18 +1,39 @@
 ---
-title: "PCA"
+title: "pca"
 author: "Mari Roberts"
-date: "4/7/2020"
+date: "6/11/2020"
 output: pdf_document
 ---
 
-```{r}
+# Questions Asked Once
+```{r eval=FALSE, include=FALSE}
+####################################################
+# load file that loads data, libraries, and custom functions
+####################################################
+##################################################################
+# load libraries, create custom functions, and import datasets 
+##################################################################
+
 # load necessary packages
 requiredPackages = c('foreign', # read dta
-                     'dplyr',
+                     'dplyr', # data manipulation
                      'haven',
-                     'gridExtra',
-                     'readr',
-                     'dummies',
+                     'gridExtra', # data manipulation
+                     'readr', # read files
+                     'readxl',# read files
+                     'dummies', # PCA
+                     'lubridate', # data manipulation
+                     'data.table', # data manipulation
+                     'FactoMineR', # PCA
+                     'factoextra', # PCA
+                     'psych', # PCA
+                     'nFactors', # PCA
+                     'lattice', # plots
+                     'glmnet', # lasso
+                     'caret', # lasso
+                     'ggplot2', # plots
+                     'cluster', # clustering
+                     'Rtsne', # clustering
                      'tidyverse') # missing values using map
 # only downloads packages if needed
 for(p in requiredPackages){
@@ -20,80 +41,76 @@ for(p in requiredPackages){
   library(p,character.only = TRUE)
 }
 
-# mydirectory <- "/Users/mari/AgricultureModel/Datasets"
-# setwd(mydirectory)
-# filenames <- list.files(path=mydirectory, pattern=".*dta")
-# df..list <- lapply(filenames, read_dta)
-#      list..res <- lapply(list(df..list), 
-#                 function(x) setDT(x)[,lapply(.SD,function(x) {  
-#          list(.N,sum(is.na(x)))}),by=hh_ID][,`:=`(index=1:.N,type=c("count", 
-#                                                               "no..na")),hh_ID])
-#      Reduce(function(x,y) merge(x,y,by=c("hh_ID","type","index")), list..res)
-
 # set wd
 mydirectory <- "/Users/mari/AgricultureModel/Datasets"
 setwd(mydirectory)
 
 filenames <- list.files(path=mydirectory, pattern=".*dta")
 
-# read in each dta file
+# read in each dta file found in Dataset folder
 filenames <- list.files(path=mydirectory, pattern=".*dta")
 for (i in 1:length(filenames)){
   assign(filenames[i], read_dta(paste("", filenames[i], sep=''))
   )}
 
-# response rates, NAs, counts
-df_counts_NAs <- list.files(path=mydirectory, pattern=".*dta") %>%
-  map(~{
-    read_dta(.x) %>%
-      group_by(hh_ID) %>%
-      summarize_all(.funs = list(count = ~n(), NAs = ~sum(is.na(.))))
-  }) %>%
-  reduce(full_join)
-```
+# custom functions
+# remove outliers 
+outliers <- function(x){
+  quantiles <- quantile( x, c(.00, .95 ) )
+  x[ x < quantiles[1] ] <- quantiles[1]
+  x[ x > quantiles[2] ] <- quantiles[2]
+  x
+}
 
-# Questions Asked Once
-
+####################################################
 ## Health and Demographics
+####################################################
 
-View(Basicinformation.dta) - age religion
-
-```{r}
 ##########################
-# Health by Person
+# Basic Info
 ##########################
 
+# find number of hh members for calculations later
 hh_count <- HouseholdComposition_level_1.dta %>% select(hh_ID, member_1_ID, hh_members) 
-# reporting differences between hh_members throughout the year, likely deaths and births?
 hh_count <- hh_count %>% distinct(hh_ID, .keep_all = TRUE)
 
+# rename variables
 hh_all <- HouseholdComposition_members_level_2.dta %>% mutate(height_meters = tot_height_inch*0.0254,
                                                               canStandOwn = hhm_health1,
                                                               canWalk5Km = hhm_health2,
                                                               canCarry20L = hhm_health3)
-
-# BMI categories
-hh_all <- hh_all %>% mutate(bmi = (weight_kg/(height_meters^2)))
+# merge with hh_count
+hh_all <- merge(hh_count, hh_all, by=c("hh_ID","member_1_ID"))
 
 # remove outliers for weight and height
 hh_all <- hh_all %>% filter(tot_height_inch >= 1 & tot_height_inch <= 100)
 hh_all <- hh_all %>% filter(weight_kg >= 1 & weight_kg <= 100)
 
+# bmi
+hh_all <- hh_all %>% mutate(bmi = (weight_kg/(height_meters^2)))
+# remove outliers for bmi
+hh_all <- hh_all %>% filter(bmi < 50)
+
+
+# create BMI categories
 hh_all <- hh_all %>% mutate(bmiCategory = ifelse(bmi >= 30, "obese", 
-                                          ifelse(bmi >=25, "overweight", 
-                                          ifelse(bmi >=18.5, "normal", 
+                                          ifelse(bmi >=25 & bmi < 30, "overweight", 
+                                          ifelse(bmi >=18.5 & bmi < 25, "normal", 
                                           ifelse(bmi < 18.5, "underweight", NA)))))
 
 # combine 0 and 77 ("no" and "don't know")
-hh_all <- hh_all %>% mutate(canCarry20La = ifelse(canCarry20L==77 | canCarry20L==0, 0, 1),
-                            canWalk5Kma = ifelse(canWalk5Km==77 | canWalk5Km==0, 0, 1),
-                            canStandOwna = ifelse(canStandOwn==77 | canStandOwn==0, 0, 1))
+hh_all <- hh_all %>% mutate(canCarry20L = ifelse(canCarry20L==77 | canCarry20L==0, 0, 1),
+                            canWalk5Km = ifelse(canWalk5Km==77 | canWalk5Km==0, 0, 1),
+                            canStandOwn = ifelse(canStandOwn==77 | canStandOwn==0, 0, 1))
 
 # 0 = male, 1 = female 
-# BMI (metric) = 1.3 x weight (kg) / height (m)^2.5
-hh_all <- hh_all %>% mutate(sex = ifelse(hhm_sex == 1,0,1)) %>% 
+# select variables
+hh_all <- hh_all %>% mutate(sex = ifelse(hhm_sex == 1,0,1),) %>% 
                        select(hh_ID,
                               member_1_ID,
+                              member_2_ID,
+                              hh_members,
+                              currentposition,
                               hhm_relation,
                               sex,
                               age = hhm_age,
@@ -102,81 +119,117 @@ hh_all <- hh_all %>% mutate(sex = ifelse(hhm_sex == 1,0,1)) %>%
                               education,
                               attendingCollege = hhm_attending,
                               occupationType = hhm_occu_type,
-                              canCarry20L = canCarry20La,
-                              canWalk5Km = canWalk5Kma,
-                              canStandOwn = canStandOwna,
+                              #hhm_occupation,
+                              canCarry20L,
+                              canWalk5Km,
+                              canStandOwn,
                               bmi,
                               bmiCategory)
 
-# factor variables
+# change into factor variables
 hh_all$sex = factor(hh_all$sex)
 hh_all$maritalStatus = factor(hh_all$maritalStatus)
 hh_all$literacy = factor(hh_all$literacy)
 hh_all$education = factor(hh_all$education)
+hh_all$attendingCollege = factor(hh_all$attendingCollege)
 hh_all$occupationType = factor(hh_all$occupationType)
 hh_all$bmiCategory = factor(hh_all$bmiCategory)
 
-# logical variables
-hh_all$attendingCollege = factor(hh_all$attendingCollege)
-hh_all$canCarry20L = factor(hh_all$canCarry20L)
-hh_all$canWalk5Km = factor(hh_all$canWalk5Km)
-hh_all$canStandOwn = factor(hh_all$canStandOwn)
 
-####################
-# Data by resondents
-####################
-hh_respondent <- hh_all %>% filter(hhm_relation == 1)
+# does hh have children?
+hh_all <- hh_all %>% mutate(isChild = ifelse(age>=18, 0, 1))
+hh_children <- hh_all %>% group_by(hh_ID) %>% tally(isChild)
+hh_children <- hh_children %>% mutate(numChildren = n) %>% select(hh_ID, numChildren)
+
+# merge number of children dataset with hh_all
+hh_all <- merge(hh_children, hh_all, by = "hh_ID")
+# factor variables
+hh_all$isChild <- factor(hh_all$isChild)
 
 ##########################
 # Health by Household
 ##########################
 
+# create is underweight variable
+hh_all <- hh_all %>% mutate(isUnderweight = ifelse(bmi < 18.5, 1, 0))
+# create pct or underweight in the household variable
+underweight <- hh_all %>% group_by(hh_ID) %>% tally(isUnderweight)
+hh_all <- merge(hh_all, underweight, by = "hh_ID")
+hh_all <- hh_all %>% mutate(totalUnderweight = n) %>% select(-n)
+hh_all <- hh_all %>%mutate(pctUnderweight = totalUnderweight/hh_members) %>% select(-totalUnderweight,-isUnderweight)
+
 # count health measures per household
-hh_subset <- hh_all %>% select(hh_ID, member_1_ID, bmi, canCarry20La, canWalk5Kma, canStandOwna)
-          carry <- hh_subset %>% group_by(hh_ID) %>% tally(canCarry20La)
-          walk <- hh_subset %>% group_by(hh_ID) %>% tally(canWalk5Kma)
-          stand <- hh_subset %>% group_by(hh_ID) %>% tally(canStandOwna)
+hh_subset <- hh_all %>% select(hh_ID, member_1_ID, bmi, canCarry20L, canWalk5Km, canStandOwn)
+          carry <- hh_subset %>% group_by(hh_ID) %>% tally(canCarry20L)
+          walk <- hh_subset %>% group_by(hh_ID) %>% tally(canWalk5Km)
+          stand <- hh_subset %>% group_by(hh_ID) %>% tally(canStandOwn)
 
 # determine percentage of health measure per household
-hh_health <- merge(hh_count, carry, by = "hh_ID") 
+hh_health <- merge(hh_all, carry, by = "hh_ID") 
 hh_health <- merge(hh_health, walk, by = "hh_ID") 
 hh_health <- merge(hh_health, stand, by = "hh_ID") 
-hh_health <- hh_health %>% select(hh_ID,
-                                    member_1_ID,
-                                    hh_members,
-                                    canCarry20L = n.x,
-                                    canWalk5Km = n.y,
-                                    canStandOwn = n) %>% 
-                             mutate(pctCanCarry20L = canCarry20L/hh_members,
-                                    pctCanWalk5Km = canWalk5Km/hh_members,
-                                    pctCanStandOwn = canStandOwn/hh_members)
+
+hh_health <- hh_health %>% mutate(totalCanCarry20L = n.x,
+                                  totalCanWalk5Km = n.y,
+                                  totalCanStandOwn = n)
+
+hh_health <- hh_health %>% mutate(pctCanCarry20L = totalCanCarry20L/hh_members,
+                                  pctCanWalk5Km = totalCanWalk5Km/hh_members,
+                                  pctCanStandOwn = totalCanStandOwn/hh_members) %>% 
+                           select(-n.x,-n.y,-n)
 
 # remove percentages above 100, differences in number of members
 hh_health <- hh_health %>% filter(pctCanCarry20L <= 1 &
                                   pctCanWalk5Km <= 1 &
-                                  pctCanStandOwn <= 1) %>% select(-canCarry20L,-canWalk5Km,-canStandOwn)
+                                  pctCanStandOwn <= 1)
 
-# children
+# factor variables
+hh_all$canCarry20L = factor(hh_all$canCarry20L)
+hh_all$canWalk5Km = factor(hh_all$canWalk5Km)
+hh_all$canStandOwn = factor(hh_all$canStandOwn)
 
+####################################################
+# Respondent info and health of household members
+####################################################
 
-```
+# data about respondents
+hh_respondent <- hh_health %>% filter(hhm_relation == 1)
 
-# PCA
+# remove variables
+hh_respondent <- hh_respondent %>% select(-member_1_ID,
+                                          -member_2_ID,
+                                          -currentposition,
+                                          -hhm_relation)
 
-PCA allows you to see the overall "shape" of the data, identifying which samples are similar to one another and which are very different. This can enable us to identify groups of samples that are similar and work out which variables make one group different from another.
+head(hh_respondent)
 
-```{r}
-# housing characteristics
+####################################################
+## Housing Characteristics
+####################################################
+
+# housing and sanitation characteristics
 housing_all <- `41. HousingandSanitation.dta` 
 
+##########
+# if there is a hh_ID duplicate, use the first entry
+# question was only supposed to be answered once but some households submitted twice
+##########
+housing_all$submissiondate <- as.Date(housing_all$submissiondate, "%b %d, %Y")
+housing_all <- setDT(housing_all)[housing_all[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+housing_all <- housing_all %>% select(-submissiondate)
+# TRUE, if there are no duplicates in hh_ID
+length(unique(housing_all$hh_ID)) == nrow(housing_all)
+##########
+
 # respondent input year instead of years old
+# determine house age
+
 housing_fix_year <- housing_all %>% arrange(desc(house_old))
 housing_fix_year <- head(housing_fix_year, 19)
 housing_fix_year <- housing_fix_year %>% select(hh_ID, house_old, today)
 housing_fix_year$today <- as.Date(housing_fix_year$today, "%b %d, %Y")
 housing_fix_year$submissionyear <- as.numeric(format(housing_fix_year$today,'%Y'))
 housing_fix_year<- housing_fix_year %>% mutate(house_age = submissionyear-house_old) %>% select(hh_ID, house_age)
-
 housing_all_not_fix_year <- housing_all %>% filter(hh_ID != 115161 &
                                         hh_ID != 120230 &
                                         hh_ID != 105055 &
@@ -195,328 +248,935 @@ housing_all_not_fix_year <- housing_all %>% filter(hh_ID != 115161 &
                                         hh_ID != 229339 &
                                         hh_ID != 224284 &
                                         hh_ID != 232370) %>% select(hh_ID, house_old)
-
 housing_all_not_fix_year <- housing_all_not_fix_year %>% mutate(house_age = house_old) %>% select(-house_old)
 housing_all_years_fixed <- merge(housing_all_not_fix_year, housing_fix_year, by = c("hh_ID"), all=TRUE)
 housing_all_years_fixed <- housing_all_years_fixed %>% select(hh_ID, house_age = house_age.x)
 
-housing_all <- housing_all %>% select(hh_ID,
-                                      cellphone,
-                                      house_sharing, 
-                                      housewall_material, 
-                                      housewall_material_other, 
-                                      houseroof_material, 
-                                      houseroof_material_other, 
-                                      housefloor_material, 
-                                      housefloor_material_other, 
-                                      house_rooms, 
-                                      house_rooms_sleeping, 
-                                      house_elec, 
-                                      house_supply_off, 
-                                      fuel_source, 
-                                      fuel_source_other, 
-                                      lighting_source, 
-                                      latrine_type, 
-                                      latrine_other, 
-                                      water_supply, 
-                                      water_other_purpose, 
-                                      water_other, 
-                                      drinking_source_same, 
-                                      drinking_source, 
-                                      drinking_other, 
-                                      water_purify, 
-                                      water_purify_other, 
-                                      handpump, 
-                                      garbage, 
-                                      garbage_other)
+# select variables
+housing_all <- housing_all %>% select(-sanitation_1_ID,-expiration_date,
+                                      -max_submissions,-task_value,-task_length,-recall,
+                                      -recall_length,-crowdsource,-week_number,-start_time,
+                                      -end_time, -today, -start_date, -house, -house_old)
 
+# merge datasets
 housing_all <- merge(housing_all_years_fixed, housing_all, by = c("hh_ID"))
 
-# all data asked once
-final_data <- merge(housing_all, hh_health, by = "hh_ID")
+#############################
+# reduce factor levels 
+#############################
 
-# map missing values
-# map(final_data, ~sum(is.na(.)))
+# water_purify - too many factor levels
+housing_all <- housing_all %>% mutate(does_water_purify = ifelse(water_purify==1, 0, 1))
 
-# remove columns with all NAs and nested questions 
-final_data <- final_data[,colSums(is.na(final_data))<nrow(final_data)]
-final_data <- final_data %>% select(-member_1_ID,
-                                    -water_purify_other, 
-                                    -fuel_source_other,
-                                    -drinking_source,
-                                    -house_supply_off,
-                                    -water_other_purpose)
+# garbage - too many factor levels
+housing_all <- housing_all %>% mutate(garbage_collected = ifelse(garbage==1|garbage==2, 1, 0))
 
-# add FAKE caloric count data
-final_data$caloricFake <- rnorm(269, mean=2000, sd=50)
+# lighting_source - too many factor levels - What is your main source of lighting fuel?
+# housing_all <- housing_all %>% mutate(lighting_source_elec = ifelse(lighting_source==1 | lighting_source==3, 1, 0))
+housing_all$lighting_source_type = as.factor(
+    ifelse(housing_all$lighting_source %in% c('1'),'electricity',
+        ifelse(housing_all$lighting_source %in% c('3'),'solar',
+        ifelse(housing_all$lighting_source %in% c('4'),'kerosine','other'))))
 
+# fuel_source - too many factor levels - What is your main source of cooking fuel? 
+# fuel	1	Electricity
+# fuel	2	Supply gas
+# fuel	3	LPG
+# fuel	4	Kerosene
+# fuel	5	Firewood
+# fuel	6	Dried cow dung
+# fuel	7	Coal
+# fuel	8	Rice bran/saw dust
+# fuel	9	Dried leaves
+# fuel	10	Other (specify)
+housing_all <- housing_all %>% mutate(fuel_source_wood = ifelse(fuel_source==5, 1, 0))
+
+
+# housing materials - too many factor levels, combine smaller levels
+# material	1	Concrete/Brick  
+# material	2	Tin/CI Sheet  
+# material	3	Wood  
+# material	4	Mud  
+# material	5	Bamboo  
+# material	6	Jute straw  
+# material	7	Plastic /Polythene  
+# material	8	Cardboard/paper  
+# material	9	Golpaata/Palm leaf  
+# material	10	Grass/Straw  
+# material	11	Other (specify)  
+
+# > table(housing_all$houseroof_material)
+#   1   2   3   4   5   6   7 
+#   9 238   9   3  73   1   2 
+
+# > table(housing_all$housewall_material)
+#   1   2   3   4   5   8 
+# 159 115   9   9  42   1 
+
+# > table(housing_all$housefloor_material)
+#   1   2   3   4   5  99 
+# 113   2   3 212   2   3 
+
+housing_all$housefloor_material = as.factor(
+    ifelse(housing_all$housefloor_material %in% c('1'),
+        'concrete',
+        ifelse(housing_all$housefloor_material %in% c('2','3','5','99'),'other','mud'))
+)
+housing_all$houseroof_material = as.factor(
+    ifelse(housing_all$houseroof_material %in% c('2'), 'tin','other'))
+
+housing_all$housewall_material = as.factor(
+    ifelse(housing_all$housewall_material %in% c('1'),
+        'concrete',
+        ifelse(housing_all$housewall_material %in% c('3','4','5','8'),'other','tin'))
+)
+
+# remove variables 
+housing_all <- housing_all %>% select(-rent_paid, 
+                                          -housewall_material_other,
+                                          -housefloor_material_other,
+                                          -houseroof_material_other,
+                                          -house_supply_off,
+                                          -house_elec_cost,
+                                          -lighting_source_other,
+                                          -lighting_source,
+                                          -latrine_other,
+                                          -latrine_type,
+                                          -drinking_other,
+                                          -water_other,
+                                          -water_purify,
+                                          -water_other_purpose, # not informative
+                                          -drinking_source,
+                                          -water_purify_other,
+                                          -arsenic_check,
+                                          -color_check,
+                                          -handpump,
+                                          -garbage_other,
+                                          -garbage,
+                                          -fuel_source,
+                                          -fuel_source_other)
+# check NAs
+map(housing_all, ~sum(is.na(.)))
+
+# check data format types
+# str(housing_all)
+
+#################
+# order factor variables
+#################
+# house wall, roof, and floor
+housing_all$housewall_material <- factor(housing_all$housewall_material, ordered = TRUE,
+                                         levels = c("concrete","tin","other"))
+housing_all$houseroof_material <- factor(housing_all$houseroof_material, ordered = TRUE,
+                                         levels = c("tin","other"))
+housing_all$housefloor_material <- factor(housing_all$housefloor_material, ordered = TRUE,
+                                          levels = c("concrete","mud","other"))
+
+##########
 # factor variables
-final_data$housewall_material <- factor(final_data$housewall_material)
-final_data$houseroof_material <- factor(final_data$houseroof_material)
-final_data$housefloor_material <- factor(final_data$housefloor_material)
-final_data$house_elec <- factor(final_data$house_elec)
-final_data$fuel_source <- factor(final_data$fuel_source)
-final_data$lighting_source <- factor(final_data$lighting_source)
-final_data$latrine_type <- factor(final_data$latrine_type)
-final_data$water_supply <- factor(final_data$water_supply)
-final_data$drinking_source_same <- factor(final_data$drinking_source_same)
-final_data$water_purify <- factor(final_data$water_purify)
-final_data$garbage <- factor(final_data$garbage)
+##########
+housing_all$house_elec  <- factor(housing_all$house_elec)
+housing_all$water_supply  <- factor(housing_all$water_supply)
+housing_all$garbage_collected <- factor(housing_all$garbage_collected)
+housing_all$lighting_source_type  <- factor(housing_all$lighting_source_type)
+housing_all$does_water_purify <- factor(housing_all$does_water_purify)
+housing_all$drinking_source_same <- factor(housing_all$drinking_source_same)
+housing_all$fuel_source_wood  <- factor(housing_all$fuel_source_wood)
 
-str(final_data)
+str(housing_all)
+# check for duplicates 
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+
+####################################################
+## Latrine and Water
+####################################################
+
+# select variables
+latrine_all <- `87. latrineUse.dta` %>% select(hh_ID, submissiondate, use_lat, main_use, count_latrine, pct_open)
+
+# main_use  - too many factor levels (change to flush or no flush)
+temp <- c("1","2","3","4","5","6")
+latrine_all$main_use_flush <- ifelse(grepl(paste(temp, collapse = "|"),latrine_all$main_use), 1, 0)
+latrine_all <- latrine_all %>% select(-main_use)
+
+# pct_open  - too many factor levels (change to defacate or doesn't defacate in public)
+latrine_all$defecation_public <- ifelse(grepl("1",latrine_all$pct_open), 1, 0)
+latrine_all <- latrine_all %>% select(-pct_open)
+
+# remove outliers for latrine count
+latrine_all <- latrine_all %>% filter(count_latrine >= 0 & count_latrine <= 10)
+
+##########
+# if there is a hh_ID duplicate, use the first entry
+##########
+latrine_all$submissiondate <- as.Date(latrine_all$submissiondate, "%b %d, %Y")
+latrine_all <- setDT(latrine_all)[latrine_all[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+latrine_all <- latrine_all %>% select(-submissiondate)
+##########
+
+##########
+# factor variables
+##########
+
+latrine_all$use_lat <- factor(latrine_all$use_lat)
+latrine_all$main_use_flush <- factor(latrine_all$main_use_flush)
+latrine_all$defecation_public <- factor(latrine_all$defecation_public)
+
+# check for NAs
+# map(latrine_all, ~sum(is.na(.)))
+
+# merge datasets
+housing_all <- merge(latrine_all, housing_all, by = c("hh_ID"))
+#housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+
+str(housing_all)
+
+# check for duplicates 
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+
+####################################################
+## Non-agricultural enterprise
+####################################################
+
+# Anyone in household owned/operated any business in 12 months?
+nonagricultural_enterprise <- `57. NonAgriculturalEnterprise_level_1.dta` %>% select(hh_ID, submissiondate, business)
+
+##########
+# if there is a hh_ID duplicate, use the first entry
+##########
+nonagricultural_enterprise$submissiondate <- as.Date(nonagricultural_enterprise$submissiondate, "%b %d, %Y")
+nonagricultural_enterprise <- setDT(nonagricultural_enterprise)[nonagricultural_enterprise[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+nonagricultural_enterprise <- nonagricultural_enterprise %>% select(-submissiondate)
+##########
+
+##########
+# factor variables
+##########
+
+nonagricultural_enterprise$business <- factor(nonagricultural_enterprise$business)
+
+# merge with household characteristics
+housing_all <- merge(nonagricultural_enterprise, housing_all, by = c("hh_ID"))
+# housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+#str(housing_all)
+
+# check for duplicates 
+housing_all$hh_ID[duplicated(housing_all$hh_ID)]
+
+####################################################
+## Facilities
+####################################################
+
+# import first facilities dataset
+facilities <- `20. Facilities_level_1.dta`
+# import second facilities dataset
+# facilities2 <- `21. Facilities_facility_repeat_level_2.dta`
+# # merge datasets
+# facilities_all <- merge(facilities, facilities2, by = c("hh_ID","facility_1_ID"))
+# clean variables
+# facilities_all <- facilities_all %>% select(hh_ID,
+#                                             submissiondate,
+#                                             facilities_visited = facilities.x,
+#                                             facility_info = facilities.y,
+#                                             fac_count,
+#                                             fac_mode,
+#                                             fac_dist,
+#                                             time_taken,
+#                                             time_units)
+# fasc	1	Health center/hospital
+# fasc	2	Bus stop
+# fasc	3	Main road
+# fasc	4	Railway station
+# fasc	5	Local shop/shops
+# fasc	6	Weekly/periodic bazaar
+# fasc	7	Nearest town
+# fasc	8	College
+# fasc	9	Agricultural office
+# fasc	10	Post office
+# fasc	11	Bank
+# fasc	12	BRAC
+# fasc	13	Grameen Bank
+# fasc	14	ASA
+
+# # calculate distance to health center (only 200 records)
+# healthcenter <- facilities_all %>% filter(facility_info == 6)
+# could be useful to calculate avg distance to facility
+
+# there are too many variations on the types of facilities visited, so change to:
+# visits health centers, bazaar, local shops
+facilities$visits_healthcenter <- ifelse(grepl("1",facilities$facilities), 1, 0)
+facilities$visits_bazaar <- ifelse(grepl("6",facilities$facilities), 1, 0)
+facilities$visits_localshop <- ifelse(grepl("5",facilities$facilities), 1, 0)
+
+# remove variables
+facilities <- facilities %>% select(hh_ID,
+                                    fac_count,
+                                    submissiondate,
+                                    visits_healthcenter,
+                                    visits_bazaar,
+                                    visits_localshop)
+
+##########
+# if there is a hh_ID duplicate, use the first entry
+##########
+facilities$submissiondate <- as.Date(facilities$submissiondate, "%b %d, %Y")
+facilities <- setDT(facilities)[facilities[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+facilities <- facilities %>% select(-submissiondate)
+##########
+
+##########
+# factor variables
+##########
+facilities$visits_healthcenter <- factor(facilities$visits_healthcenter)
+facilities$visits_bazaar <- factor(facilities$visits_bazaar)
+facilities$visits_localshop <- factor(facilities$visits_localshop)
+
+# check for duplicates 
+facilities$hh_ID[duplicated(facilities$hh_ID)]
+
+# merge with housing data
+housing_all <- merge(facilities, housing_all, by = c("hh_ID"))
+
+####################################################
+## Farming Plots
+####################################################
+
+# merge plot datasets together
+plots <- Plots_plot_level_2.dta # fix year
+temp <- plots_level_1.dta %>% select(hh_ID, submissiondate, plot_1_ID, today) 
+plots <- merge(plots, temp, by=c("hh_ID","plot_1_ID"))
+
+plots$today <- format(as.Date(plots$today, format="%b %d, %Y"),"%Y")
+plots$yr_acq <- format(as.Date(plots$yr_acq, format="%b %d, %Y"),"%Y")  
+plots$today <- as.numeric(plots$today)
+plots$yr_acq <- as.numeric(plots$yr_acq)
+plots$plot_age <- plots$today - plots$yr_acq 
+
+########################
+# too many plot types (change to three types: homestead, cultivable, other)
+########################
+# 1	Homestead
+# 2	Cultivable/arable land
+# 3	Pasture
+# 4	Bush/forest
+# 5	Waste/non-arable land
+# 6	Land in riverbed
+# 7	Other residential/commercial plot
+# 8	Cultivable Pond
+# 9	Derelict Pond
+
+plots$plot_type_homestead <- ifelse(grepl("1",plots$plot_type), 1, 0)
+temp <- c("2","8")
+plots$plot_type_cultivable_land_pond <- ifelse(grepl(paste(temp, collapse = "|"),plots$plot_type), 1, 0)
+temp <- c("3","4","5","6","7","9"," ")
+plots$plot_type_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$plot_type), 1, 0)
+
+plots <- plots %>% 
+  mutate(plot_type = case_when((plot_type_homestead==1) ~ "homestead",
+                              (plot_type_cultivable_land_pond==1) ~ "cultivable",
+                              (plot_type_other==1) ~ "other"))
+plots <- plots %>% select(-plot_type_homestead,-plot_type_cultivable_land_pond,-plot_type_other)
+
+# has a cultivable plot 
+plots <- plots %>% mutate(hasCultivablePlot = ifelse(plot_type == "cultivable",1,0))
+temp <- plots %>% group_by(hh_ID) %>% tally(hasCultivablePlot)
+plots <- merge(plots, temp, by = "hh_ID")
+plots <- plots %>% mutate(totalCultivablePlot = n) %>% select(-n)
+
+# operational status
+# cur_opr	1	Fallow
+# cur_opr	2	Own operated
+# cur_opr	3	Rented/leased in/cash
+# cur_opr	4	Rented/leased in/crop share
+# cur_opr	5	Mortgaged in
+# cur_opr	6	Rented/leased out/cash
+# cur_opr	7	Rented/leased out/crop share
+# cur_opr	8	Mortgage out
+# cur_opr	9	Group leased in with other farmer
+# cur_opr	10	Leased out to NGO
+# cur_opr	11	Taken from joint owner
+# cur_opr	12	Jointly with other owners
+
+ #  1   2   3   4   5   6   7   8   9  11  12 
+ # 56 354  17   8  21   6   5   9   4   2   1
+
+# owns a plot
+plots <- plots %>% mutate(hasOwnPlot = ifelse(cur_opr_status == 2,1,0))
+temp <- plots %>% group_by(hh_ID) %>% tally(hasOwnPlot)
+plots <- merge(plots, temp, by = "hh_ID")
+plots <- plots %>% mutate(totalOwnPlot = n) %>% select(-n)
+
+# select variables 
+plots <- plots %>% select(hh_ID, 
+                          totalCultivablePlot,
+                          totalOwnPlot)
+
+# remove duplicates
+plots <- distinct(plots, hh_ID, .keep_all= TRUE)
+plots$hh_ID[duplicated(plots$hh_ID)]
+head(plots)
+
+# merge with housing
+housing_all <- merge(housing_all, plots, by="hh_ID")
+
+
+#Don't need info below for now. Information by specific plot. 
+
+# ########################
+# # who_owns - too many factor levels (change to three types)
+# ########################
+# plots$who_owns_male <- ifelse(grepl("1",plots$who_owns), 1, 0)
+# plots$who_owns_family <- ifelse(grepl("2",plots$who_owns), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$who_owns_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_owns), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(who_owns = case_when((who_owns_male==1) ~ "male",
+#                               (who_owns_family==1) ~ "family",
+#                               (who_owns_other==1) ~ "other"))
+# plots <- plots %>% select(-who_owns_male,-who_owns_family,-who_owns_other)
+# 
+# ########################
+# # who_owns_off - too many factor levels (change to three types)
+# ########################
+# plots$who_owns_off_male <- ifelse(grepl("1",plots$who_owns_off), 1, 0)
+# plots$who_owns_off_family <- ifelse(grepl("2",plots$who_owns_off), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$who_owns_off_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_owns_off), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(who_owns_off = case_when((who_owns_off_male==1) ~ "male",
+#                               (who_owns_off_family==1) ~ "family",
+#                               (who_owns_off_other==1) ~ "other"))
+# plots <- plots %>% select(-who_owns_off_male,-who_owns_off_family,-who_owns_off_other)
+#  
+# ########################
+# # who_decision - too many factor levels (change to three types)
+# ########################
+# plots$who_decision_male <- ifelse(grepl("1",plots$who_decision), 1, 0)
+# plots$who_decision_family <- ifelse(grepl("2",plots$who_decision), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$who_decision_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_decision), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(who_decision = case_when((who_decision_male==1) ~ "male",
+#                               (who_decision_family==1) ~ "family",
+#                               (who_decision_other==1) ~ "other"))
+# plots <- plots %>% select(-who_decision_male,-who_decision_family,-who_decision_other)
+# 
+# ########################
+# # who_responsible - not enough responses, didn't include
+# ########################
+# 
+# ########################
+# # who_dec_spd - too many factor levels (change to three types)
+# ########################
+# plots$who_dec_spd_male <- ifelse(grepl("1",plots$who_dec_spd), 1, 0)
+# plots$who_dec_spd_family <- ifelse(grepl("2",plots$who_dec_spd), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$who_dec_spd_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_dec_spd), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(who_dec_spd = case_when((who_dec_spd_male==1) ~ "male",
+#                               (who_dec_spd_family==1) ~ "family",
+#                               (who_dec_spd_other==1) ~ "other"))
+# plots <- plots %>% select(-who_dec_spd_male,-who_dec_spd_family,-who_dec_spd_other)
+# 
+# ########################
+# # who_infra - too many factor levels (change to three types)
+# ########################
+# plots$who_infra_male <- ifelse(grepl("1",plots$who_infra), 1, 0)
+# plots$who_infra_family <- ifelse(grepl("2",plots$who_infra), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$who_infra_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$who_infra), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(who_infra = case_when((who_infra_male==1) ~ "male",
+#                               (who_infra_family==1) ~ "family",
+#                               (who_infra_other==1) ~ "other"))
+# plots <- plots %>% select(-who_infra_male,-who_infra_family,-who_infra_other)
+# 
+# ########################
+# # cur_opr_status - too many factor levels (change to three types)
+# ########################
+# plots$cur_opr_status_fallow <- ifelse(grepl("1",plots$cur_opr_status), 1, 0)
+# plots$cur_opr_status_own <- ifelse(grepl("2",plots$cur_opr_status), 1, 0)
+# temp <- c("3","4","5","6","7","8","9","11")
+# plots$cur_opr_status_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$cur_opr_status), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(cur_opr_status = case_when((cur_opr_status_fallow==1) ~ "fallow",
+#                               (cur_opr_status_own==1) ~ "own",
+#                               (cur_opr_status_other==1) ~ "other"))
+# plots <- plots %>% select(-cur_opr_status_fallow,-cur_opr_status_own,-cur_opr_status_other)
+# 
+# ########################
+# # how_acq  - too many factor levels (change to three types)
+# ########################
+# plots$how_acq_bought <- ifelse(grepl("1",plots$how_acq), 1, 0)
+# plots$how_acq_inherited <- ifelse(grepl("2",plots$how_acq), 1, 0)
+# temp <- c("3","4","5","6")
+# plots$how_acq_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$how_acq), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(how_acq = case_when((how_acq_bought==1) ~ "bought",
+#                               (how_acq_inherited==1) ~ "inherited",
+#                               (how_acq_other==1) ~ "other"))
+# plots <- plots %>% select(-how_acq_bought,-how_acq_inherited,-how_acq_other)
+# 
+# ########################
+# # plot_use  - too many factor levels (change to four types)
+# ########################
+# plots$plot_use_agriculture <- ifelse(grepl("1",plots$plot_use), 1, 0)
+# plots$plot_use_fisheries <- ifelse(grepl("2",plots$plot_use), 1, 0)
+# plots$plot_use_livestock <- ifelse(grepl("2",plots$plot_use), 1, 0)
+# temp <- c("3","4","5","6","7","99")
+# plots$plot_use_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$plot_use), 1, 0)
+# 
+# plots <- plots %>% 
+#   mutate(plot_use = case_when((plot_use_agriculture==1) ~ "agriculture",
+#                               (plot_use_fisheries==1) ~ "fisheries",
+#                               (plot_use_other==1) ~ "other",
+#                               (plot_use_livestock==1) ~ "livestock"))
+# plots <- plots %>% select(-plot_use_agriculture,-plot_use_fisheries,-plot_use_livestock,-plot_use_other)
+# 
+# ###############################
+# # flood depth
+# # $flood_depth
+# # [1] 0
+# # 
+# # $flood_unit
+# # [1] 175
+# # too many missing 
+# 
+# ##########
+# # if there is a hh_ID duplicate, use the first entry
+# ##########
+# # 100+ duplicates
+# plots$hh_ID[duplicated(plots$hh_ID)]
+# plots$submissiondate <- as.Date(plots$submissiondate, "%b %d, %Y")
+# plots <- setDT(plots)[plots[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+# plots <- plots %>% select(-submissiondate)
+# ##########
+# 
+# # select final variables
+# 
+# plots <- plots %>% select(hh_ID,
+#                           size_plot,
+#                           dis_from_home,
+#                           soil_type,
+#                           plot_age,
+#                           plot_type,
+#                           plot_use,
+#                           who_owns,
+#                           who_owns_off,
+#                           who_decision,
+#                           who_dec_spd,
+#                           who_infra,
+#                           cur_opr_status,
+#                           cur_mv,
+#                           how_acq)
+# 
+# ##########
+# # factor variables
+# ##########
+# plots$soil_type <- factor(plots$soil_type)
+# plots$plot_type <- factor(plots$plot_type)
+# plots$plots$plot_use <- factor(plots$plots$plot_use)
+# plots$who_owns <- factor(plots$who_owns)
+# plots$who_owns_off <- factor(plots$who_owns_off)
+# plots$who_decision <- factor(plots$who_decision)
+# plots$who_dec_spd <- factor(plots$who_dec_spd)
+# plots$who_infra <- factor(plots$who_infra)
+# plots$cur_opr_status <- factor(plots$cur_opr_status)
+# plots$how_acq <- factor(plots$how_acq)
+# 
+# # check for NAs
+# # map(plots, ~sum(is.na(.)))
+# 
+# # no duplicates
+# plots$hh_ID[duplicated(plots$hh_ID)]
+
+
+##Subjective Wellbeing and Final HH Dataset
+
+####################################################
+# Subjective Wellbeing
+####################################################
+
+# # Which step of ladder (scale of 0 to 10) do you feel you stand at present?
+# wellbeing <- `69. SubjectiveWellbeing.dta` %>% select(hh_ID, submissiondate, recall, week_number,
+#                                   g1_satisfied, g2_satisfied, g3_satisfied,
+#                                   g4_satisfied, g5_satisfied)
+# 
+# # find satisfaction average
+# wellbeing_avg <- wellbeing %>%
+#   group_by(hh_ID) %>%
+#   summarise_at(vars(-submissiondate, -recall, -week_number), funs(mean(., na.rm=TRUE)))
+# wellbeing_avg <- transform(wellbeing_avg, satisfaction = rowMeans(wellbeing_avg[,-1], na.rm = TRUE))
+# 
+# wellbeing_avg <- wellbeing_avg %>% select(hh_ID, satisfaction)
+# 
+# housing_final_data <- merge(housing_all, wellbeing_avg, by = "hh_ID")
+
+##################################################################################################################
+# FINAL DATAFRAME
+##################################################################################################################
+# merge with respondent info
+final_df <- merge(housing_all, hh_respondent, by="hh_ID")
+
+# remove unnecessary variables
+final_df <- final_df %>% select(-totalCanCarry20L,-totalCanStandOwn,-totalCanWalk5Km)
+
+# remove missing values
+final_df <- final_df[complete.cases(final_df),]
+###############################################################################################################
+
+###############################################################################################################
 ```
 
+
+# Scale Data
 ```{r}
-###################################################################################################
-# VIEW
-###################################################################################################
-View(final_data)
-View(hh_respondent)
+df <- final_df
+
+# reorder variables
+df <- df %>% select(hh_ID,
+                                          visits_healthcenter,
+                                          visits_bazaar,
+                                          visits_localshop,
+                                          business,
+                                          #use_lat,
+                                          main_use_flush,
+                                          defecation_public,
+                                          house_sharing,
+                                          housewall_material,
+                                          houseroof_material,
+                                          housefloor_material,
+                                          house_elec,
+                                          water_supply,
+                                          drinking_source_same,
+                                          does_water_purify,
+                                          garbage_collected,
+                                          lighting_source_type,
+                                          fuel_source_wood,
+                                          sex,
+                                          maritalStatus,
+                                          literacy,
+                                          education,
+                                          attendingCollege,
+                                          occupationType,
+                                          canCarry20L,
+                                          canWalk5Km,
+                                          canStandOwn,
+                                          bmiCategory,
+                                          isChild,
+                                            #satisfaction,
+                                            age,
+                                            bmi,
+                                            numChildren,
+                                            hh_members,
+                                            house_age,
+                                            rent_estimate,
+                                            count_latrine,
+                                            house_rooms,
+                                            house_rooms_sleeping,
+                                            fuel_cost,
+                                            lighting_cost,
+                                            cellphone,
+                                            cell_cost,
+                                            fac_count,
+                                            pctUnderweight,
+                                            pctCanCarry20L,
+                                            pctCanWalk5Km,
+                                            pctCanStandOwn,
+                                            totalCultivablePlot,
+                                            totalOwnPlot)
+
+# scale data
+df <- df %>% select(-hh_ID)
+scale2 <- function(x, na.rm = FALSE) (x - mean(x, na.rm = na.rm)) / sd(x, na.rm)
+df <- df %>% mutate_if(is.numeric, scale2, na.rm = TRUE)
+head(df)
 ```
 
 
 # PCA
-https://uc-r.github.io/pca
+```{r}
+# # recode dummy frame
+pca_data <- dummy.data.frame(df)
+# 
+str(pca_data)
+
+pca_data <- lapply(pca_data, as.numeric)
+str(pca_data)
+
+pca_data <- as.data.frame(pca_data)
+str(pca_data)
+```
+
+## Figure out dimensions of well-being using Factor Analysis
+
+http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/112-pca-principal-component-analysis-essentials/
 
 ```{r}
-new_data <- dummy.data.frame(final_data, names = c("housewall_material","houseroof_material","housefloor_material","house_elec","fuel_source","lighting_source","latrine_type","water_supply","drinking_source_same","water_purify","garbage"))
-str(new_data)
-new_data <- new_data %>% select(-hh_ID)
+res.pca <- PCA(pca_data, graph = FALSE)
+print(res.pca)
+summary(res.pca$eig)
 
-scaled_df <- apply(new_data, 2, scale)
-head(scaled_df)
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 10))
+```
 
-# remove NAs
-row.has.na <- apply(scaled_df, 1, function(x){any(is.na(x))})
-final.filtered <- scaled_df[!row.has.na,]
+The eigenvalues measure the amount of variation retained by each principal component. Eigenvalues are large for the first PCs and small for the subsequent PCs. That is, the first PCs corresponds to the directions with the maximum amount of variation in the data set.
 
-hh.cov <- cov(final.filtered)
-hh.eigen <- eigen(hh.cov)
-str(hh.eigen)
+Examine the eigenvalues to determine the number of principal components to be considered.
+```{r}
+eig.val <- get_eigenvalue(res.pca)
+eig.val
 
-# Extract the loadings
-(phi <- hh.eigen$vectors[,1:2])
+var <- get_pca_var(res.pca)
 
-phi <- -phi
-row.names(phi) <- c("house_age","cellphone","house_sharing","housewall_material1", "housewall_material2","housewall_material3","housewall_material4","housewall_material5","houseroof_material1",
-"houseroof_material2","houseroof_material3","houseroof_material4","houseroof_material5","houseroof_material6",
-"houseroof_material7","housefloor_material1","housefloor_material2","housefloor_material3","housefloor_material4",
-"housefloor_material5","housefloor_material99", "house_rooms","house_rooms_sleeping","house_elec0",
-"house_elec1","fuel_source1","fuel_source2","fuel_source3","fuel_source4",
-"fuel_source5","fuel_source6","fuel_source7","fuel_source8","fuel_source9",
-"fuel_source99","lighting_source1","lighting_source3","lighting_source4","lighting_source5",
-"lighting_source99","latrine_type1","latrine_type2","latrine_type3","latrine_type4",
-"latrine_type5","latrine_type6","latrine_type99","water_supply0","water_supply1",
-"drinking_source_same0","drinking_source_same1" ,"water_purify1","water_purify2","water_purify3",
-"water_purify4","water_purify5","water_purify99","garbage1","garbage2",
-"garbage3","garbage4","garbage5","garbage6","garbage7",
-"garbage8","hh_members","pctCanCarry20L","pctCanWalk5Km","pctCanStandOwn",
-"caloricFake")
-colnames(phi) <- c("PC1", "PC2")
+# Coordinates
+head(var$coord)
+# Cos2: quality on the factore map
+head(var$cos2)
+# Contributions to the principal components
+head(var$contrib)
+```
+```{r}
+# library("corrplot")
+# corrplot(var$cos2, is.corr=FALSE)
 
-# Calculate Principal Components scores
-PC1 <- as.matrix(scaled_df) %*% phi[,1]
-PC2 <- as.matrix(scaled_df) %*% phi[,2]
+# Total cos2 of variables on Dim.1 and Dim.2
+fviz_cos2(res.pca, choice = "var", axes = 1:2, top = 10)
 
-# Create data frame with Principal Components scores
-PC <- data.frame(hh_ID = row.names(final_data), PC1, PC2)
-head(PC)
+# Color by cos2 values: quality on the factor map
+fviz_pca_var(res.pca, col.var = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = TRUE # Avoid text overlapping
+             )
 
-# Plot Principal Components for each HH
-PCAplot <- ggplot(PC, aes(PC1, PC2)) + 
-  modelr::geom_ref_line(h = 0) +
-  modelr::geom_ref_line(v = 0) +
-  geom_text(aes(label = hh_ID), size = 3) +
-  xlab("First Principal Component") + 
-  ylab("Second Principal Component") + 
-  ggtitle("First Two Principal Components of HH Data")
-PCAplot
+# Change the transparency by cos2 values
+# fviz_pca_var(res.pca, alpha.var = "cos2")
+
+# head(var$contrib, 4)
+
+
+# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 15)
+
+# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 15)
 ```
 
 ```{r}
-pca_result <- prcomp(final.filtered, scale = FALSE)
-names(pca_result)
-# means
-pca_result$center
-# standard deviations
-pca_result$scale
-# provides the principal component loadings
-pca_result$rotation 
-pca_result$rotation <- -pca_result$rotation
-pca_result$rotation
+# total contribution to PC1 and PC2 
+fviz_contrib(res.pca, choice = "var", axes = 1:2, top = 10)
+```
 
-pca_result$x <- - pca_result$x
-head(pca_result$x)
+The most important (or, contributing) variables can be highlighted on the correlation plot as follow:
+```{r}
+fviz_pca_var(res.pca, col.var = "contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
+```
 
-biplot(pca_result, scale = 0)
+
+#*Clustering*
+```{r}
+# Create a grouping variable using kmeans
+# Create 3 groups of variables (centers = 3)
+set.seed(123)
+res.km <- kmeans(var$coord, centers = 3, nstart = 25)
+grp <- as.factor(res.km$cluster)
+# Color variables by groups
+fviz_pca_var(res.pca, col.var = grp, 
+             palette = c("#0073C2FF", "#EFC000FF", "#868686FF"),
+             legend.title = "Cluster")
+```
+
+Identify the most significantly associated variables with a given principal component:
+```{r}
+res.desc <- dimdesc(res.pca, axes = c(1,2), proba = 0.05)
+# Description of dimension 1
+res.desc$Dim.1
+
+# Description of dimension 2
+res.desc$Dim.2
+
+res.desc
 ```
 
 ```{r}
-pca_result$sdev # standard deviation of each principal component
-VE <- pca_result$sdev^2 # variance explained by each principal component is obtained by squaring these values
+# results, for individuals
+ind <- get_pca_ind(res.pca)
+ind
+# Coordinates of individuals
+head(ind$coord)
+# Quality of individuals
+head(ind$cos2)
+# Contributions of individuals
+head(ind$contrib)
 
-# proportion of variance explained by each principal component
-PVE <- VE / sum(VE)
-round(PVE, 2)
+fviz_pca_ind(res.pca, col.ind = "cos2", 
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE # Avoid text overlapping (slow if many points)
+             )
+
+fviz_pca_ind(res.pca, pointsize = "cos2", 
+             pointshape = 21, fill = "#E7B800",
+             repel = TRUE # Avoid text overlapping (slow if many points)
+             )
 ```
-
- [1] 0.07 0.06 0.05 0.04 0.04 0.03 0.03 0.03 0.03 0.03 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.02 0.01
-[30] 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.01 0.00 0.00 0.00 0.00 0.00 0.00 0.00
-[59] 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
-
-ordered factor variables
-recode dummies
-
-
-
-
-
-
-
-
-
-# Agriculture 
-
-01. AgriculturalExtensionServices.dta
-02. AgriculturalProduction_level_1.dta
-03. AgriculturalProduction_plot_repeat_begin_level_2.dta
-04. AgriculturalProduction_crop_level_3.dta
-06. AgriculturalSubsidyCard.dta
 
 ```{r}
-
-agriculture <- `01. AgriculturalExtensionServices.dta`
-
-# agriculture_NAs <- agriculture %>%
-#   group_by(hh_ID) %>% 
-#   summarize_all(.funs = list(count = ~n(), NAs = ~sum(is.na(.))))
-
-
+# Total contribution on PC1 and PC2
+fviz_contrib(res.pca, choice = "ind", axes = 1:2)
 ```
 
-###07. BadShocks_level_1.dta
-###08. BadShocks_event_repeat_level_2.dta
+## PCA: Another way
 
-###09. ClimateEvent.dta
+https://rstudio-pubs-static.s3.amazonaws.com/376139_e9adaefdf4594a79a54a3f87ff4852d6.html
 
-###10. Cosmetics_level_1.dta
-###11. Cosmetics_item_repeat_level_2.dta
+```{r}
+pca_data <- pca_data[complete.cases(pca_data),]
+ev <- eigen(cor(pca_data)) # get eigenvalues
+ap <- parallel(subject=nrow(pca_data),var=ncol(pca_data), rep=100, cent=.05)
+nS <- nScree(x=ev$values, aparallel=ap$eigen$qevpea)
+plotnScree(nS)
+parallel<-fa.parallel(pca_data, fm='minres', fa='fa') # 17-29?
+```
 
-###12. Crops_level_1.dta
-###13. Crops_plot_repeat_begin_level_2.dta
-###14. Crops_crop_level_3.dta
-###15. Crops_group_crop_i_croptype_level_4.dta
+Optimal factor levels = 18.
+Oblique rotation (rotate = “oblimin”) as I believe that there is a correlation in the factors.
+Used `Ordinary Least Squared/Minres` factoring (fm = “minres”), as it is known to provide results similar to `Maximum Likelihood` without assuming a multivariate normal distribution and derives solutions through iterative eigendecomposition like a principal axis.
+```{r}
+factor3 <- fa(pca_data,nfactors =18,rotate = "oblimin",fm="minres")
+# print(factor12)
+```
 
-###16. CurrentMigrants_level_1.dta
-###17. CurrentMigrants_begin_repeat_mig_level_2.dta
+A general rule of thumb is that if the absolute value of the standardized loading is greater than 0.3, the variable is relevant for the particular factor
 
-###18. DrinkingWater_level_1.dta
-###19. DrinkingWater_source_level_2.dta
+```{r}
+#  consider the loadings more than 0.3 and not loading on more than one factor
+# negative values are acceptable
+print(factor3$loadings,cutoff = 0.4)
+options(max.print=1000000) # don't let rmd cut off results with max print default
+```
 
-###20. Facilities_level_1.dta
-###21. Facilities_facility_repeat_level_2.dta
+```{r}
+# fa.diagram(factor3)
+summary(factor3) # fa(r = pca_data, nfactors = 20, rotate = "oblimin", fm = "minres")
 
-###22. FertilizersAndPesticides_level_1.dta
-###23. FertilizersAndPesticides_plot_repeat_begin_level_2.dta
-###24. FertilizersAndPesticides_crop_level_3.dta
-###25. FertilizersAndPesticides_group_crop_i_croptype_level_4.dta
-###26. FertilizersAndPesticides_rep_fert_level_5.dta
+summary(Efa5) # fa(r = pca_data, nfactors = 20, rotate = "oblimin", fm = "minres")
+```
 
-###27. FishPondInputs_level_1.dta
-###28. FishPondInputs_begin_level_2.dta
-###29. FishPondProduction_level_1.dta
-###30. FishPondProduction_pond_begin_repeat_level_2.1.dta
-###31. FishPondProduction_river_repeat_level_2.2.dta
-###32. FishPondProduction_fish_repeat_level_3.dta
+The root mean square of residuals (RMSR) is 0.04. This is acceptable as this value should be closer to 0. 
 
-###33. FoodDiary_level_1.dta
-###34. FoodDiary_food_level_2.dta
-###35. Fooddiary_food_foodtype_level_3.dta
-###36. FoodStorageCapacity.dta
+RMSEA (root mean square error of approximation) index. Its value, 0 shows the good model fit as it’s below 0.05. 
+Tucker-Lewis Index (TLI) is -0.524 – an acceptable value considering it’s over 0.9.[[[not sure about this because it's negative]]]
 
-###37. FuelLighting_level_1.dta
-###38. FuelLighting_item_repeat_level_2.dta
+## Clustering
 
-###39. GoodShocks_level_1.dta
-###40. GoodShocks_event_repeat_level_2.dta
+Assessing clustering tendency:
 
-###41. HousingandSanitation.dta
+To assess the clustering tendency, the Hopkins’ statistic and a visual approach can be used. This can be performed using the function get_clust_tendency() [factoextra package], which creates an ordered dissimilarity image (ODI).
 
-###42. InformationTools_level_1.dta
-###43. InformationTools_tech_level_2.dta
-###44. InformationTools_tech_use_level_3.dta
+Hopkins statistic: If the value of Hopkins statistic is close to 1 (far above 0.5), then we can conclude that the dataset is significantly clusterable.
+Visual approach: The visual approach detects the clustering tendency by counting the number of square shaped dark (or colored) blocks along the diagonal in the ordered dissimilarity image.
+```{r}
+gradient.color <- list(low = "steelblue",  high = "white")
 
-###45. Irrigation_level_1.dta
-###46. Irrigation_plot_repeat_begin_level_2.dta
-###47. Irrigation_crop_level_3.dta
-###48. Irrigation_group_crop_i_crop_repeat_type_level_4.dta
+pca_data %>%    # Remove column 5 (Species)
+  scale() %>%     # Scale variables
+  get_clust_tendency(n = 50, gradient = gradient.color)
+```
 
-###49. Livestock_level_1.dta
-###50. Livestock_animal_level_2.dta
+Cluster of households can be seen in the top right corner.
 
-###51. Loans_level_1.dta
-###52. Loans_each_loan_level_2.dta
+```{r}
+# Optimal number of clusters
+library("NbClust")
+library(factoextra)
+res.nbclust <- pca_data %>%
+  scale() %>%
+  NbClust(distance = "euclidean",
+          min.nc = 2, max.nc = 10, 
+          method = "complete", index ="all") 
+fviz_nbclust(res.nbclust, ggtheme = theme_minimal())
+```
 
-###53. Marketing_level_1.dta
-###54. Marketing_sellrell_prod_repeat_level_2.dta
+```{r}
+# Optimal number of clusters for k-means
+my_data <- scale(pca_data)
+fviz_nbclust(my_data, kmeans, method = "gap_stat")
+```
+```{r}
+# Compute k-means
+set.seed(123)
+km.res <- kmeans(scale(pca_data), 3, nstart = 25)
 
-###55. MobileInternet_level_1.dta
-###56. MobileInternet_app_use_level_2.dta
+# Visualize
+fviz_cluster(km.res, data = pca_data,
+             palette = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07"),
+             ggtheme = theme_minimal(),
+             main = "Partitioning Clustering Plot"
+             )
+```
 
-###57. NonAgriculturalEnterprise_level_1.dta
-###58. NonAgriculturalEnterprise_buss_level_2.dta
 
-###59. OtherIncome_level_1.dta
+# Factor Analysis: Second Attempt
 
-###60. OtherIncome_income_level_2.dta
+```{r}
+#################################
+## Exploratory Factor Analysis ##
+#################################
 
-###61. RemittanceIn_level_1.dta
-###62. RemittanceIn_begin_repeat_mig_level_2.dta
-###63. RemittanceOut_level_1.dta
-###64. RemittanceOut_begin_repeat_mig_level_2.dta
+### Step 1: Examining the Correlation Matrix (Supplmental Material Section 1) ###
 
-###65. SafetyProgram_level_1.dta
-###66. SafetyProgram_event_repeat_level_2.dta
+# An EFA explores the relationship between variables, so it can be useful to examine a correlation matrix of all
+# of the possible items to identify what relationships between the items may exist. The code below creates this
+# correlation matrix. To account for missing data we chose to build this matrix based on pairwise complete
+# observations. Pairwise complete observations uses all pairs available for a correlation, regardless of whether
+# or not there are responses to the other observed items. We chose this option because of the small amount of
+# missing data in the observed responses (< 5%) and because the analysis is exploratory in nature. Using a
+# more complex missing data technique would not necessarily improve the quality of the data for the purposes
+# of an exploratory analysis.
 
-###67. Savings_level_1.dta
-###68. Savings_each_savings_level_2.dta
+# Calculating correlation matrix based on pairwise complete observations
+test <- pca_data
+efa_cormat <- round(cor(test, use="pairwise.complete.obs"),3)
 
-###69. SubjectiveWellbeing.dta
+# Display the correlation matrix
 
-###70. TransportTravel_level_1.dta
-###71. TransportTravel_item_repeat_level_2.dta
-###72. TransportationTools_level_1.dta
-###73. TransportationTools_transport_level_2.dta
-###74. TransportationTools_transport_use_level_3.dta
+efa_cormat
 
-###75. WashingCleaning_level_1.dta
-###76. WashingCleaning_item_repeat_level_2.dta
+# The 'corrplot' package re-orders the items and colors the strength of the correlations to make clusters of
+# items more apparent.
 
-###77. WorkAnimals_level_1.dta
-###78. WorkAnimals_animals_level_2.dta
-###79. WorkAnimals_animals_use_level_3.dta
+corrplot((efa_cormat), order = "hclust", tl.col='black', tl.cex=.75)
 
-###80. employment_level_1.dta
-###81. employment_work_done_level_2.dta
+### Step 2: Determining the number of factors to look for in the EFA (6.6.3) ###
 
-###82. farmLabor_level_1.dta
-###83. farmLabor_begin_repeat_plot_level_2.dta
-###84. farmLabor_labor_repeat_level_3.dta
+# In an EFA, the user has to specificy how many factors (dimensions) the program should try to model. There
+# are multiple methods to do this that return both as visual representations and suggested number of factors
+# using multiple tests.
 
-###85. illness_level_1.dta
-###86. illness_was_ill_level_2.dta
+# Visual representation of dimensionality using scree plot and parallel analysis
 
-###87. latrineUse.dta
-###88. latrineWalk_level_1.dta
-###89. latrineWalk_begin_repeat_lat_level_2.dta
+fa.parallel(test, fm = 'pa')
 
-###90. rentingToolsMachAn_level_1.dta
-###91. rentingToolsMachAn_plot_repeat_begin_level_2.dta
-###92. rentingToolsMachAn_crop_level_3.dta
-###93. rentingToolsMachAn_group_crop_i_crop_repeat_type_level_4.dta
+### Step 3: Specifying the EFA Model (Section 6.6)###
 
-###94. schoolAttendance_level_1.dta
-###95. schoolAttendance_missed_school_level_2.dta
+# Below the syntax examines the correlation matrix that we created above. We extract 5 factors, as we wanted
+# to examine the most complex solution first. We use an oblimin rotation ("oblimin") that allows our latent factors to be
+# correlated, and we also use a principal axis solution ("pa") as our factoring method. The solution is saved to the R
+# object "Efa5."
 
-###96. tubewellWalk_level_1.dta
-###97. tubewellWalk_begin_repeat_tw_level_2.dta
+Efa5 <- fa(r = efa_cormat, nfactors = 18,
+           rotate = "oblimin", fm = "minres",
+           max.iter = 500)
+Efa5
+
+print(Efa5$loadings,cutoff = 0.5)
+options(max.print=1000000) # don't let rmd cut off results with max print default
+```
