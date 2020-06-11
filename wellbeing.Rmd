@@ -1620,22 +1620,258 @@ housing <- housing %>% select(hh_ID,
                                   house_rooms_sleeping, 
                                   housefloor_material, 
                                   house_elec,
-                                  housewall_material, 
-                                  lighting_source)
+                                  housewall_material)
+                                  #lighting_source)
 
 # select variables
-latrine <- `87. latrineUse.dta` %>% select(hh_ID, submissiondate, use_lat, main_use, count_latrine, pct_open)
-# pct_open  - too many factor levels (change to defacate or doesn't defacate in public)
-latrine$defecation_public <- ifelse(grepl("1",latrine$pct_open), 1, 0)
-latrine <- latrine %>% select(hh_ID, defecation_public)
-
-finaldata <- merge(housing, latrine, by = "hh_ID")
+# latrine <- `87. latrineUse.dta` %>% select(hh_ID, submissiondate, use_lat, main_use, count_latrine, pct_open)
+# # pct_open  - too many factor levels (change to defacate or doesn't defacate in public)
+# latrine$defecation_public <- ifelse(grepl("1",latrine$pct_open), 1, 0)
+# latrine <- latrine %>% select(hh_ID, defecation_public)
+# 
+# final_data <- merge(housing, latrine, by = "hh_ID")
 
 # merge with respondent data
-finaldata <- merge(finaldata, hh_respondent, by = "hh_ID")
+final_data <- merge(housing, hh_respondent, by = "hh_ID")
+# factor variables
+# final_data$defecation_public <- as.factor(final_data$defecation_public)
+final_data$house_elec <- as.factor(final_data$house_elec)
+# final_data$lighting_source <- as.factor(final_data$lighting_source)
+final_data$occupation <- as.factor(final_data$occupation)
+
+##########################################################
+# merge with food data (weekly averages per household member)
+##########################################################
+final_data_food <- merge(final_data, df_food_basic1, by = "hh_ID")
+
+str(final_data_food)
+
+# count number of times a household reported
+final_data_food$count <- 1
+count <- final_data_food %>% group_by(hh_ID) %>% tally(count)
+count <- count %>% mutate(reportCount = n) %>% select(hh_ID, reportCount)
+final_data_food <- merge(final_data_food, count, by = "hh_ID")
+final_data_food <- final_data_food %>% select(-count)
 ```
 
+## Clustering
+https://www.r-bloggers.com/clustering-mixed-data-types-in-r/
+```{r}
+# load libraries 
+library(cluster)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(Rtsne)
 
+df <- final_data_food %>% select(-avg_calories_member, -week_number, -reportCount)
+# remove NAs
+df <- na.omit(df)
+# check duplicates
+df$hh_ID[duplicated(df$hh_ID)]
+# remove duplicates
+df <- df %>% distinct()
+# remove inconsistencies
+df <- df %>% filter(hh_ID != 110111 & hh_ID != 230347 & hh_ID != 240476 & hh_ID != "116180")  # 116180 had 70 reports,multple reports per week
+# remove hh_ID
+df_nohhID <- df %>% select(-hh_ID)
+
+
+#' Compute Gower distance
+gower_dist <- daisy(df_nohhID, metric = "gower")
+gower_mat <- as.matrix(gower_dist)
+
+#' Print most similar households
+df_nohhID[which(gower_mat == min(gower_mat[gower_mat != min(gower_mat)]), arr.ind = TRUE)[1, ], ]
+options(max.print=1000000) # don't let rmd cut off results with max print default
+
+#' Print most dissimilar households
+df_nohhID[which(gower_mat == max(gower_mat[gower_mat != max(gower_mat)]), arr.ind = TRUE)[1, ], ]
+options(max.print=1000000) # don't let rmd cut off results with max print default
+
+# identify number of clusters (2-8)
+sil_width <- c(NA)
+for(i in 2:8){  
+  pam_fit <- pam(gower_dist, diss = TRUE, k = i)  
+  sil_width[i] <- pam_fit$silinfo$avg.width  
+}
+plot(1:8, sil_width,
+     xlab = "Number of clusters",
+     ylab = "Silhouette Width")
+lines(1:8, sil_width)
+```
+
+3 clusters looks good.
+
+Partitioning around medoids (PAM) is an iterative clustering procedure with the following steps:
+
+Choose k random entities to become the medoids
+Assign every entity to its closest medoid (using our custom distance matrix in this case)
+For each cluster, identify the observation that would yield the lowest average distance if it were to be re-assigned as the medoid. If so, make this observation the new medoid.
+If at least one medoid has changed, return to step 2. Otherwise, end the algorithm.
+If you know the k-means algorithm, this might look very familiar. In fact, both approaches are identical, except k-means has cluster centers defined by Euclidean distance (i.e., centroids), while cluster centers for PAM are restricted to be the observations themselves (i.e., medoids).
+
+pros: Easy to understand, more robust to noise and outliers when compared to k-means, and has the added benefit of having an observation serve as the exemplar for each cluster
+
+```{r}
+k <- 3
+pam_fit <- pam(gower_dist, diss = TRUE, k)
+pam_results <- df %>%
+  mutate(cluster = pam_fit$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary = summary(.))
+pam_results$the_summary
+```
+
+The main differences between the clusters are house wall and floor materials and education.
+
+Another benefit of the PAM algorithm with respect to interpretation is that the medoids serve as exemplars of each cluster.
+
+*Cluster 1: OLDER, MARRIED/UNMARRIED, FARMERS/TRADERS, HOUSING IS CONCRETE*
+age 34.27
+married
+farming/trader
+education 2 = some primary or secondary school
+housing matrerials are concrete
+
+*Cluster 2: YOUNG, UNMARRIED, ATTENDING COLLEGE, HOUSING NOT CONCRETE*
+age = 22.33
+unmarried
+attending college
+education 3 = some college
+housing materials are mud or tin
+
+*Cluster 3: OLDER, MARRIED, FARMERS, HOUSING NOT CONCRETE*
+age = 35.18
+married
+farming
+education 2 = some primary or secondary school
+housing materials are mud or tin/other
+
+```{r}
+df[pam_fit$medoids, ]
+```
+
+```{r}
+tsne_obj <- Rtsne(gower_dist, is_distance = TRUE)
+
+tsne_data <- tsne_obj$Y %>%
+  data.frame() %>%
+  setNames(c("X", "Y")) %>%
+  mutate(cluster = factor(pam_fit$clustering),
+         hh_ID = df$hh_ID)
+
+ggplot(aes(x = X, y = Y), data = tsne_data) +
+  geom_point(aes(color = cluster))
+```
+
+```{r}
+# code below can be used to look closer at locations of clusters and compare houses
+# tsne_data %>%
+#   filter(X > 15 & X < 25,
+#          Y > -15 & Y < -10) %>%
+#   left_join(df, by = "hh_ID") %>%
+#   collect %>%
+#   .[["name"]]
+```
+
+Compare clusters
+
+```{r}
+tsne_data <- merge(tsne_data, count, by = "hh_ID")
+cluster1 <- tsne_data %>% filter(cluster == 1) %>% select(hh_ID)
+cluster1 <- merge(cluster1, final_data_food, by = "hh_ID")
+cluster2 <- tsne_data %>% filter(cluster == 2) %>% select(hh_ID)
+cluster2 <- merge(cluster2, final_data_food, by = "hh_ID")
+cluster3 <- tsne_data %>% filter(cluster == 3) %>% select(hh_ID)
+cluster3 <- merge(cluster3, final_data_food, by = "hh_ID")
+
+tsne_data_clusters <- merge(tsne_data, final_data_food,by = "hh_ID")
+tsne_data_clusters <- tsne_data_clusters %>% select(-avg_calories_member, -week_number)
+tsne_data_clusters <- tsne_data_clusters %>% distinct()
+# function
+# foodplot <- function(fooditem, dataf){
+# fooditem <- dataf %>% filter(food_name_type == paste(fooditem,sep=""))
+# ggplot(fooditem, aes(x=week_number, color=food_name_type)) +
+#   geom_histogram(fill="white", position="dodge")+
+#   theme(legend.position="top") + 
+#   labs(title="Food Reported",x="Week Number", y = "Count")
+#   x
+# }
+# 
+# foodplot(vegetables, fooddiary_all_week)
+
+ggplot(cluster1, aes(week_number, avg_calories_member)) +
+           geom_point(na.rm=TRUE)
+
+ggplot(cluster2, aes(week_number, avg_calories_member)) +
+           geom_point(na.rm=TRUE)
+
+ggplot(cluster3, aes(week_number, avg_calories_member)) +
+           geom_point(na.rm=TRUE)
+
+# plot 
+p <- ggplot(cluster1, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Calories Reported by Week") +
+    xlab("Week Number") + ylab("Calories Per HH Member") +
+    theme(plot.title = element_text(lineheight=.8, face="bold", size = 20)) +
+    theme(text = element_text(size=18))
+p
+
+p <- ggplot(cluster2, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Calories Reported by Week") +
+    xlab("Week Number") + ylab("Calories Per HH Member") +
+    theme(plot.title = element_text(lineheight=.8, face="bold", size = 20)) +
+    theme(text = element_text(size=18))
+p
+
+p <- ggplot(cluster3, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Calories Reported by Week") +
+    xlab("Week Number") + ylab("Calories Per HH Member") +
+    theme(plot.title = element_text(lineheight=.8, face="bold", size = 20)) +
+    theme(text = element_text(size=18))
+p
+
+
+# look at one household
+temp <- final_data_food %>% filter(hh_ID == 113139)
+p <- ggplot(temp, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Calories Reported for HH 113139 (cluster 1)") +
+    xlab("Week Number") + ylab("Calories Per HH Member") +
+    theme(plot.title = element_text(lineheight=.8, face="bold", size = 20)) +
+    theme(text = element_text(size=18))
+p
+temp <- final_data_food %>% filter(hh_ID == 225289)
+p <- ggplot(temp, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Calories Reported for HH 225289 (cluster 2)") +
+    xlab("Week Number") + ylab("Calories Per HH Member") +
+    theme(plot.title = element_text(lineheight=.8, face="bold", size = 20)) +
+    theme(text = element_text(size=18))
+p
+temp <- final_data_food %>% filter(hh_ID == 221249)
+p <- ggplot(temp, aes(week_number, avg_calories_member)) +
+    geom_bar(stat="identity", na.rm = TRUE) +
+    ggtitle("Calories Reported for HH 221249 (cluster 3)") +
+    xlab("Week Number") + ylab("Calories Per HH Member") +
+    theme(plot.title = element_text(lineheight=.8, face="bold", size = 20)) +
+    theme(text = element_text(size=18))
+p
+
+# number of times a hh reported calories - compare clusters
+# Overlaid histograms
+mu <- plyr::ddply(tsne_data_clusters, "cluster", summarise, grp.mean=mean(reportCount))
+p<-ggplot(tsne_data_clusters, aes(x=reportCount, color=cluster)) +
+  geom_histogram(fill="white", position="dodge")+
+  geom_vline(data=mu, aes(xintercept=grp.mean, color=cluster),
+             linetype="dashed")+
+  theme(legend.position="top")
+p
+```
 
 
 
