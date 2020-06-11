@@ -1302,9 +1302,16 @@ fooddiary_all <- fooddiary_all[complete.cases(fooddiary_all),]
 # remove outliers with custom outliers function (found at top of code)
 fooddiary_all$calories_total_grams <- outliers(fooddiary_all$calories_total_grams)
 
-summary(fooddiary_all$calories_total_grams)
+# summary(fooddiary_all$calories_total_grams)
+# 
+# names(fooddiary_all)
 
-names(fooddiary_all)
+mymonths <- c("Jan","Feb","Mar",
+              "Apr","May","Jun",
+              "Jul","Aug","Sep",
+              "Oct","Nov","Dec")
+#add abbreviated month name
+fooddiary_all$MonthAbb <- mymonths[fooddiary_all$submission_month]
 ```
 
 Min.   1st Qu.    Median      Mean   3rd Qu.      Max. 
@@ -1315,7 +1322,8 @@ Min.   1st Qu.    Median      Mean   3rd Qu.      Max.
 ```{r fig1, fig.height = 3.5, fig.width = 3.5}
 # Food Types Reported by Month
 fooddiary_all_week <- fooddiary_all %>% filter(recall=="week")
-jpeg("food_types_reported.jpg") # save jpeg of graph
+
+# jpeg("food_types_reported.jpg") # save jpeg of graph
 p1 <- fooddiary_all_week %>%
   filter(recall=="week") %>%
   ggplot(aes(food_name_type)) +
@@ -1326,21 +1334,39 @@ p1 <- fooddiary_all_week %>%
            y = "count",
            x = "food group") + theme_bw(base_size = 15)
 p1 + theme(axis.text.x = element_text(angle = 60, hjust = 1))
-dev.off()
+# dev.off()
 ```
 
 Look for Ramadan and Manga
 
+       cereals          dairy         drinks      fishlarge      fishsmall 
+          3435            277            128           1051            857 
+        fruits       leafyveg        meategg            oil otherfoodohome 
+           590           1469           2021           1262            221 
+        pulses         spices     vegetables 
+          1430            801           5561 
+
 ```{r fig2, fig.height = 3.5, fig.width = 3.5}
-xyplot(
-  calories_total_grams ~ submission_month | food_name_type, 
-  # layout = c(2, 7),               # panel with ncol = 5 and nrow = 3
-  group = food_name_type, data = fooddiary_all_week,
-  type = c("p", "smooth"),        # Show points and smoothed line
-  scales = "free"                 # Make panels axis scales independent
-  )
-```
-```{r}
+# calories of all food types reported by week (shows variation in calories by food type)
+# xyplot(
+#   calories_total_grams ~ submission_month | food_name_type, 
+#   # layout = c(2, 7),               # panel with ncol = 5 and nrow = 3
+#   group = food_name_type, data = fooddiary_all_week,
+#   type = c("p", "smooth"),        # Show points and smoothed line
+#   scales = "free"                 # Make panels axis scales independent
+#   )
+
+
+#https://ipad.fas.usda.gov/cropexplorer/pecad_stories.aspx?regionid=bg&ftype=prodbriefs#:~:text=Bangladesh%20has%20three%20rice%20seasons,and%20harvested%20during%20May%2DJune.
+
+#Bangladesh has three rice seasons, the aus, aman, and boro. The aus season rice crop is planted during March-April and harvested during June-July. The aman season rice is planted in June-July and harvested during November-December. The boro season rice is planted in December-January and harvested during May-June.
+
+############################################
+# look at specific food groups reported by week
+############################################
+
+# all food groups in one graph
+
 ggplot(fooddiary_all_week, aes(x=week_number, color=food_name_type)) +
   geom_histogram(fill="white", position="dodge")+
   theme(legend.position="top") + 
@@ -1349,9 +1375,54 @@ ggplot(fooddiary_all_week, aes(x=week_number, color=calories_total_grams)) +
   geom_histogram(position="dodge")+
   theme(legend.position="top") + 
   labs(title="Total Calories Reported",x="Week Number", y = "Total Calories")
+
+# separate graphs
+
+meat <- fooddiary_all_week %>% filter(food_name_type == "meategg")
+ggplot(meat, aes(x=submission_month, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  theme(legend.position="top") + 
+  labs(title="Meat Reported",x="Week Number", y = "Count") 
+
+cereals <- fooddiary_all_week %>% filter(food_name_type == "cereals")
+ggplot(cereals, aes(x=submission_month, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  theme(legend.position="top") + 
+  labs(title="Cereals Reported",x="Week Number", y = "Count")
+
+pulses <- fooddiary_all_week %>% filter(food_name_type == "pulses")
+ggplot(pulses, aes(x=submission_month, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  theme(legend.position="top") + 
+  labs(title="Pulses Reported",x="Week Number", y = "Count")
+
+leafyveg <- fooddiary_all_week %>% filter(food_name_type == "leafyveg")
+ggplot(leafyveg, aes(x=submission_month, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  theme(legend.position="top") + 
+  labs(title="Leafy Veg Reported",x="Week Number", y = "Count")
+
+fruits <- fooddiary_all_week %>% filter(food_name_type == "fruits")
+ggplot(fruits, aes(x=submission_month, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  theme(legend.position="top") + 
+  labs(title="Fruits Reported",x="Week Number", y = "Count")
+
+vegetables <- fooddiary_all_week %>% filter(food_name_type == "vegetables")
+ggplot(vegetables, aes(x=submission_month, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  theme(legend.position="top") + 
+  labs(title="Vegetables Reported",x="Week Number", y = "Count")
+
+dairy <- fooddiary_all_week %>% filter(food_name_type == "dairy")
+ggplot(dairy, aes(x=submission_month, color=food_name_type)) +
+  geom_histogram(fill="white", position="dodge")+
+  theme(legend.position="top") + 
+  labs(title="Dairy Reported",x="Week Number", y = "Count")
 ```
 
 ## Find avg caloric intake per person in each household
+
 ```{r}
 ############################################
 # find average calories by household
@@ -1390,25 +1461,22 @@ calories <- calories %>% mutate(hh_calories_total = n) %>% select(-n)
 ############################################
 # df_food_basic <- merge(fooddiary_all, temp, by = "hh_ID")
 
-df_food_basic <- merge(calories, hh_count, by = "hh_ID")
+df_calorie_avg <- merge(calories, hh_count, by = "hh_ID")
 
-df_food_basic <- df_food_basic %>%mutate(avg_calories_member = hh_calories_total/hh_members) 
+df_calorie_avg <- df_calorie_avg %>% mutate(avg_calories_member = hh_calories_total/hh_members) 
 
-df_food_basic1 <- df_food_basic %>% select(hh_ID, week_number, avg_calories_member)
+# create dataframe for graphs
+df_food_basic1 <- df_calorie_avg %>% select(hh_ID, week_number, avg_calories_member)
 
 # remove outliers with custom outliers function (found at top of code)
 df_food_basic1$avg_calories_member <- outliers(df_food_basic1$avg_calories_member)
 
-p <- ggplot(df_food_basic1, aes(avg_calories_member, ..count..))
-p <- p + geom_histogram(binwidth = 1, colour="white")
-p
-
-df_food_basic1 <- df_food_basic1 %>% filter(avg_calories_member >= 0 & avg_calories_member < 16090) # error?
-df_food_basic1 <- df_food_basic1 %>% filter(avg_calories_member != 10000) # error?
-qplot(x=week_number, y=avg_calories_member,
-      data=df_food_basic1, na.rm=TRUE,
-      main="Average Weekly Caloric Intake",
-      xlab="Date", ylab="Calories")
+# df_food_basic1 <- df_food_basic1 %>% filter(avg_calories_member >= 0 & avg_calories_member < 16090) # error?
+# df_food_basic1 <- df_food_basic1 %>% filter(avg_calories_member != 10000) # error?
+# qplot(x=week_number, y=avg_calories_member,
+#       data=df_food_basic1, na.rm=TRUE,
+#       main="Average Weekly Caloric Intake",
+#       xlab="Date", ylab="Calories")
 
 ggplot(df_food_basic1, aes(x = week_number, y = avg_calories_member)) +
     geom_point(aes(color = hh_ID),size = .9) + 
@@ -1418,9 +1486,168 @@ ggplot(df_food_basic1, aes(x = week_number, y = avg_calories_member)) +
 p<-ggplot(df_food_basic1, aes(x=avg_calories_member)) 
 p+ geom_histogram() + 
   labs(title = "Average Weekly Caloric Intake", x = "Calories", y = "Count")
-
-str(df_food_basic1)
 ```
+
+# Gather useful information for economic wellbeing of household
+
+After performing a PCA, the following were the most important factors for the first two components.
+
+maritalStatus, 
+occupationType (add attending college), 
+education, 
+age, 
+bmi,
+sex (added in addition to PCA)
+literacy, 
+cellphone,
+house_rooms_sleeping, 
+housefloor_material, 
+house_elec,
+housewall_material, 
+lighting_source,
+defacation_public, 
+
+```{r}
+# hh members
+hh_count <- HouseholdComposition_level_1.dta %>% select(hh_ID, member_1_ID, hh_members) 
+hh_count <- hh_count %>% distinct(hh_ID, .keep_all = TRUE)
+
+# household 
+hh1 <- HouseholdComposition_members_level_2.dta %>% mutate(height_meters = tot_height_inch*0.0254)
+
+# merge with hh_count
+hh <- merge(hh_count, hh1, by=c("hh_ID","member_1_ID"))
+
+# remove outliers for weight and height
+hh <- hh %>% filter(tot_height_inch >= 1 & tot_height_inch <= 100)
+hh <- hh %>% filter(weight_kg >= 1 & weight_kg <= 100)
+
+# bmi
+hh <- hh %>% mutate(bmi = (weight_kg/(height_meters^2)))
+# remove outliers for bmi
+hh <- hh %>% filter(bmi < 50)
+
+hh <- hh %>% mutate(sex = ifelse(hhm_sex == 1,0,1)) %>% 
+                       select(hh_ID,
+                              member_1_ID,
+                              member_2_ID,
+                              hh_members,
+                              currentposition,
+                              hhm_relation,
+                              sex,
+                              age = hhm_age,
+                              maritalStatus = marital_status,
+                              literacy,
+                              education,
+                              attendingCollege = hhm_attending,
+                              occupationType = hhm_occu_type,
+                              bmi)
+                              
+# change into factor variables
+hh$sex = factor(hh$sex)
+hh$maritalStatus = factor(hh$maritalStatus)
+hh$literacy = factor(hh$literacy)
+hh$education = factor(hh$education)
+hh$attendingCollege = factor(hh$attendingCollege)
+hh$occupationType = factor(hh$occupationType)
+
+####################################################
+# Respondent info and household members
+####################################################
+
+# data about respondents
+hh_respondent <- hh %>% filter(hhm_relation == 1)
+
+# remove variables
+hh_respondent <- hh_respondent %>% select(-member_1_ID,
+                                          -member_2_ID,
+                                          -currentposition,
+                                          -hhm_relation)
+
+head(hh_respondent)
+
+# fix attending college
+hh_respondent <- hh_respondent %>% 
+  mutate(occupation = case_when((occupationType=="farming") ~ "farming",
+                              (occupationType=="livestock") ~ "livestock",
+                              (occupationType=="nonearning" & attendingCollege==0) ~ "nonearning",
+                              (occupationType=="nonearning" & attendingCollege==1) ~ "attendingCollege",
+                              (occupationType=="prod") ~ "prod",
+                              (occupationType=="salaried") ~ "salaried",
+                              (occupationType=="self") ~ "self",
+                              (occupationType=="trader") ~ "trader",
+                              (occupationType=="wage") ~ "wage",
+                              (occupationType=="") ~ "NA"))
+hh_respondent <- hh_respondent %>% filter(occupationType != "NA") %>% select(-attendingCollege) # remove NAs
+hh_respondent <- hh_respondent %>% select(-occupationType)
+
+########################################
+# housing char
+########################################
+
+housing <- `41. HousingandSanitation.dta` 
+
+##########
+# if there is a hh_ID duplicate, use the first entry
+# question was only supposed to be answered once but some households submitted twice
+##########
+housing$submissiondate <- as.Date(housing$submissiondate, "%b %d, %Y")
+housing <- setDT(housing)[housing[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+housing <- housing %>% select(-submissiondate)
+# TRUE, if there are no duplicates in hh_ID
+length(unique(housing$hh_ID)) == nrow(housing)
+##########
+
+housing$lighting_source_type = as.factor(
+    ifelse(housing$lighting_source %in% c('1'),'electricity',
+        ifelse(housing$lighting_source %in% c('3'),'solar',
+        ifelse(housing$lighting_source %in% c('4'),'kerosine','other'))))
+
+housing$housefloor_material = as.factor(
+    ifelse(housing$housefloor_material %in% c('1'),
+        'concrete',
+        ifelse(housing$housefloor_material %in% c('2','3','5','99'),'other','mud'))
+)
+housing$houseroof_material = as.factor(
+    ifelse(housing$houseroof_material %in% c('2'), 'tin','other'))
+
+housing$housewall_material = as.factor(
+    ifelse(housing$housewall_material %in% c('1'),
+        'concrete',
+        ifelse(housing$housewall_material %in% c('3','4','5','8'),'other','tin'))
+)
+housing <- housing %>% select(hh_ID,
+                                  house_rooms_sleeping, 
+                                  housefloor_material, 
+                                  house_elec,
+                                  housewall_material, 
+                                  lighting_source)
+
+# select variables
+latrine <- `87. latrineUse.dta` %>% select(hh_ID, submissiondate, use_lat, main_use, count_latrine, pct_open)
+# pct_open  - too many factor levels (change to defacate or doesn't defacate in public)
+latrine$defecation_public <- ifelse(grepl("1",latrine$pct_open), 1, 0)
+latrine <- latrine %>% select(hh_ID, defecation_public)
+
+finaldata <- merge(housing, latrine, by = "hh_ID")
+
+# merge with respondent data
+finaldata <- merge(finaldata, hh_respondent, by = "hh_ID")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Scale Data
@@ -1757,7 +1984,7 @@ fa.parallel(test, fm = 'pa')
 # correlated, and we also use a principal axis solution ("pa") as our factoring method. The solution is saved to the R
 # object "Efa5."
 
-Efa5 <- fa(r = efa_cormat, nfactors = 17,
+Efa5 <- fa(r = efa_cormat, nfactors = 18,
            rotate = "oblimin", fm = "minres",
            max.iter = 500)
 Efa5
@@ -1769,12 +1996,23 @@ options(max.print=1000000) # don't let rmd cut off results with max print defaul
 
 ```
 
+
 # Notes
 Responses in food diary:
 Look over time and identify periods were there were responses
 Seasonal access to calories
 Mean and variance as access to calories and cluster households
 Relatively low caloric variation/or feast vs famine
+Disaggregate underreporting and food shortages = income, calories, food groups
+Meats grains dairy overtime -- households in this asset are less likely etc.
+Meats during the year, or random
+Outcome variables?
+Pct meat reporting? 
+Is someone reporting low, and lower in meat calories than we'd expect
+Predict shifts in food types reporting
+Differences in these predictions between households?
+Fraction of dairy grain meat
+
 
 # Links
 http://wavedatalab.github.io/machinelearningwithr/post4.html
