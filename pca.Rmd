@@ -835,7 +835,6 @@ final_df <- final_df[complete.cases(final_df),]
 ###############################################################################################################
 ```
 
-
 # Scale Data
 ```{r}
 df <- final_df
@@ -903,12 +902,11 @@ head(df)
 
 # PCA
 ```{r}
-# # recode dummy frame
-pca_data <- dummy.data.frame(df)
+# # recode dummy frame - do I need to do this?
+# pca_data <- dummy.data.frame(df)
 # 
-str(pca_data)
 
-pca_data <- lapply(pca_data, as.numeric)
+pca_data <- lapply(df, as.numeric)
 str(pca_data)
 
 pca_data <- as.data.frame(pca_data)
