@@ -160,8 +160,6 @@ hh_health$canCarry20L = factor(hh_health$canCarry20L)
 hh_health$canWalk5Km = factor(hh_health$canWalk5Km)
 hh_health$canStandOwn = factor(hh_health$canStandOwn)
 
-View(hh_health)
-
 ####################################################
 # Respondent info and health of household members
 ####################################################
@@ -178,7 +176,10 @@ hh_respondent <- hh_respondent %>% select(-member_1_ID,
                                           -totalCanStandOwn,
                                           -totalCanWalk5Km,
                                           -isChild)
+```
 
+# Food Data
+```{r}
 #############################################################################################################################
 #############################################################################################################################
 # *Food Data:*  
@@ -229,9 +230,10 @@ fooddiary_all <- fooddiary_all %>% select(-food_type) # duplicate variable
 # 118 food_type_name are missing
 # remove missing values for now.
 fooddiary_all <- fooddiary_all[complete.cases(fooddiary_all),]
-```
 
-```{r}
+########################################################################################################################
+# Food Spreadsheets (Calories, List of Food Names)
+########################################################################################################################
 # food names
 food_list <- read_csv("Datasets/food_list.csv") # names of food and ID number
 food_calories <- read_csv("Datasets/food_cal.csv") # names of food and calorie information 
@@ -242,7 +244,7 @@ food_info <- merge(food_calories, food_list, by="food_name") # combine datasets 
 write.csv(food_info, "food_info.csv")
 
 ##############################
-# CALORIES NEED TO BE FIXED
+# Calories
 ##############################
 # Carbohydrates provide 4 calories per gram, protein provides 4 calories per gram, and fat provides 9 calories per gram
 # food_info <- food_info %>% filter(calorie_grams != 0)
@@ -301,7 +303,6 @@ fooddiary_cleaned <- fooddiary_cleaned %>% select(hh_ID,
 fooddiary_cleaned <- fooddiary_cleaned %>%
   mutate(datetime = as.POSIXct(strptime(submissiondate, format = "%b %d, %Y %I:%M:%S %p")),
          datetime_military = strftime(datetime, format = "%Y-%m-%d %H:%M"))
-
 fooddiary_cleaned <- fooddiary_cleaned %>% mutate(date_new = as.Date(as.POSIXct(strptime(datetime_military, format = "%Y-%m-%d"))))
 
 # create date for weeks
@@ -635,6 +636,7 @@ fooddiary_all_week <- fooddiary_all_week %>% mutate(isFish = ifelse(food_name_ty
     myfreqs <- fooddiary_all_week %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
     pct_fish <- merge(myfreqs, pct_fish, by = c("hh_ID","week_number"))
     pct_fish <- pct_fish %>% mutate(pct_fish = numFish/freq) %>% select(-numFish, -freq)
+    
 
 # protein
 fooddiary_all_week <- fooddiary_all_week %>% mutate(isProtein = ifelse(food_name_type == "fishlarge"|
@@ -814,6 +816,4 @@ temp$cluster <- factor(temp$cluster)
 
 write.csv(temp, "final_data.csv")
 ```
-
-
 
