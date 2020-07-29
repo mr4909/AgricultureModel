@@ -24,6 +24,7 @@ requiredPackages = c('foreign', # read dta
                      'ggplot2', # plots
                      'cluster', # clustering
                      'Rtsne', # clustering
+                     'lmer', # linear mixed effects model
                      'tidyverse') # missing values using map
 # only downloads packages if needed
 for(p in requiredPackages){
@@ -161,4 +162,45 @@ summary(ols <- lm(pctCanWalk5Km ~ pct_protein_var, data = df_final))
 summary(ols <- lm(pct_meat_var ~ numChildren + hh_members + sex + age + maritalStatus + literacy +
                     education + attendingCollege + occupationType + canCarry20L + canWalk5Km +
                     canStandOwn + pctCanCarry20L + pctCanWalk5Km + pctCanStandOwn, data = df_final))
+
+########################################
+
+#basic linear model
+fit.1<-glm(pct_meat_var ~ numChildren + hh_members + sex + age + maritalStatus + literacy +
+             education + attendingCollege + occupationType + canCarry20L + canWalk5Km +
+             canStandOwn + pctCanCarry20L + pctCanWalk5Km + pctCanStandOwn, data=df_final)
+summary(fit.1)
+
+#random intercept model for individual differences
+fit.2<-lmer(pct_meat_var ~ numChildren + hh_members + sex + age + maritalStatus + literacy +
+              education + attendingCollege + occupationType + canCarry20L + canWalk5Km +
+              canStandOwn + pctCanCarry20L + pctCanWalk5Km + pctCanStandOwn +(1|hh_ID), data=df_final)
+summary(fit.2)
+
+# #individual trajectory model with random slope for time
+# fit.3<-lmer(avg_calories_member ~ numChildren + hh_members + sex + age + maritalStatus + literacy +
+#               education + attendingCollege + occupationType + canCarry20L + canWalk5Km +
+#               canStandOwn + pctCanCarry20L + pctCanWalk5Km + pctCanStandOwn + week_number +(week_number|hh_ID), data=df_final)
+# summary(fit.3)
+# anova(fit.3, fit.2)
+# 
+# #curvilinear trajectory model with random nonlinear time
+# fit.4<-lmer(avg_calories_member ~ numChildren + hh_members + sex + age + maritalStatus + literacy +
+#               education + attendingCollege + occupationType + canCarry20L + canWalk5Km +
+#               canStandOwn + pctCanCarry20L + pctCanWalk5Km + pctCanStandOwn + week_number+I(week_number^2)+(week_number+I(week_number^2)|hh_ID), data=df_final)
+# summary(fit.4)
+# anova(fit.4, fit.3)
+# 
+# #individual trajectory model with fixed effects 
+# fit.5<-lmer(avg_calories_member ~ week_number*(numChildren + hh_members + sex + age + maritalStatus + literacy +
+#                                                  education + attendingCollege + occupationType + canCarry20L + canWalk5Km +
+#                                                  canStandOwn + pctCanCarry20L + pctCanWalk5Km + pctCanStandOwn)+(week_number|hh_ID), data=df_final)
+# summary(fit.5)
+# anova(fit.4, fit.5)
+
+AIC(fit.1)
+AIC(fit.2)
+# AIC(fit.3)
+# AIC(fit.4)
+# AIC(fit.5) 
 
