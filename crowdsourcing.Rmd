@@ -281,17 +281,17 @@ mu_education_wellbeing
 
 ```{r}
 
-# wellbeing_cs_test <- `69. SubjectiveWellbeing.dta` %>% filter(recall == "week")
-# 
-# ######
-# # crowdourced info
-# ######
-# satisfaction_cs <- wellbeing_cs_test %>% filter(crowdsource == 1) %>% select(hh_ID, submissiondate, recall, week_number, 
-#                                   g1_satisfied, g2_satisfied, g3_satisfied, 
-#                                   g4_satisfied, g5_satisfied)
-# 
-# satisfaction_cs <- satisfaction_cs[!duplicated(satisfaction_cs$hh_ID), ]
-# 
+wellbeing_cs_test <- `69. SubjectiveWellbeing.dta` %>% filter(recall == "week")
+
+######
+# crowdourced info
+######
+satisfaction_cs <- wellbeing_cs_test %>% filter(crowdsource == 1) %>% select(hh_ID, submissiondate, recall, week_number,
+                                  g1_satisfied, g2_satisfied, g3_satisfied,
+                                  g4_satisfied, g5_satisfied)
+
+satisfaction_cs <- satisfaction_cs[!duplicated(satisfaction_cs$hh_ID), ]
+
 # 
 # # find satisfaction average
 # satisfaction_cs <- satisfaction_cs %>% 

@@ -1,5 +1,5 @@
 ---
-title: "Food Reporting in Bagladesh"
+title: "Food Reporting in Bangladesh"
 author: "Mari Roberts"
 date: "6/11/2020"
 output: pdf_document
@@ -677,6 +677,7 @@ Food Groups Reported:
 Bangladesh has three rice seasons, the aus, aman, and boro. The aus season rice crop is planted during March-April and harvested during June-July. The aman season rice is planted in June-July and harvested during November-December. The boro season rice is planted in December-January and harvested during May-June.  
 
 ## Data Visualization
+
 ```{r fig2, echo=FALSE, fig.height=3.5, fig.width=3.5, message=FALSE, warning=FALSE, paged.print=FALSE}
 ############################################
 # look at specific food groups reported by week
@@ -784,6 +785,76 @@ final_data_food <- final_data_food %>% select(-count)
 str(final_data_food)
 ```
 
+## Eating Less vs Reporting Less
+
+```{r}
+head(fooddiary_all_week)
+food_reporting <- fooddiary_all_week %>% select(hh_ID, week_number, food_count, food_name, food_name_type, food_type_quant, calories_grams, calories_total_grams)
+View(food_reporting)
+
+temp2 <- food_reporting %>% filter(week_number == 3 &
+                                     # week_number == 4 &
+                                     week_number == 5 &
+                                     week_number == 6 &
+                                     week_number == 7 &
+                                     week_number == 8 &
+                                     week_number == 9 &
+                                     week_number == 10 &
+                                     week_number == 11 &
+                                     week_number == 12 &
+                                     week_number == 13 &
+                                     week_number == 14 &
+                                     week_number == 15 &
+                                     week_number == 16 &
+                                     week_number == 17 &
+                                     week_number == 18 &
+                                     week_number == 19 &
+                                     week_number == 20 &
+                                     week_number == 21 &
+                                     week_number == 22 &
+                                     week_number == 23 &
+                                     week_number == 24 &
+                                     week_number == 25 &
+                                     week_number == 26 &
+                                     week_number == 27 &
+                                     week_number == 28 &
+                                     week_number == 29 &
+                                     week_number == 30 &
+                                     week_number == 31 &
+                                     week_number == 32 &
+                                     week_number == 33 &
+                                     week_number == 34 &
+                                     week_number == 35 &
+                                     week_number == 36 &
+                                     week_number == 37 &
+                                     week_number == 38 &
+                                     week_number == 39 &
+                                     week_number == 40 &
+                                     week_number == 41 &
+                                     week_number == 42 &
+                                     week_number == 43 &
+                                     week_number == 44 &
+                                     week_number == 45 &
+                                     week_number == 46 &
+                                     week_number == 47 &
+                                     week_number == 48 &
+                                     week_number == 49 &
+                                     week_number == 50)
+                                     
+write.csv(food_reporting, "food_reporting.csv")
+                                     
+```
+
+
+
+
+
+
+
+
+
+
+
 ## Clustering
 https://www.r-bloggers.com/clustering-mixed-data-types-in-r
 
@@ -801,6 +872,8 @@ Another benefit of the PAM algorithm with respect to interpretation is that the 
 ```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
 # remove calories, week number, and number of reports in order to find clusters of households by household information
 df <- final_data_food %>% select(-avg_calories_member, -week_number)
+# df <- df %>% dplyr::select(-week_number_f,-year, -month_num, -x)
+
 # remove NAs
 df <- na.omit(df)
 # check duplicates
@@ -867,14 +940,13 @@ mid reporting
 underweight  
 
 *Cluster 3: OLDER, MARRIED, FARMERS, HOUSING NOT CONCRETE*  
-age = 35.18  
+age = 35.24
 married  
 farming  
 education 2 = some primary or secondary school  
 housing materials are mud or tin/other  
 high reporting  
 normal weight  
-
 
 *Households used as mediods:*  
 ```{r echo=FALSE}
@@ -994,6 +1066,7 @@ p
 # 
 # ![](clusterplot.png)
 ```
+
 
 # Additional References
 http://wavedatalab.github.io/machinelearningwithr/post4.html  
