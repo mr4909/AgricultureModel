@@ -7,12 +7,9 @@ output: html_document
 
 "Many tasks included a 'crowdsourcing' component, in which the respondent would complete the task first for him- or herself, and then repeat the task for any friend, neighbor, or passerby; these participants were ideally selected on an approximately random basis ... The purpose of the crowdsourcing component in the study was to examine whether a crowdsourced sample might demonstrate a reduced selection bias, and thus better approximate a true representative sample, than our purposive sample of potential early adopters."
 
-The purpose of this code is to test this out by examining how similar the purposive sample is to the crowdsourced one in terms of select characteristics (e.g., age, gender, literacy, education, etc.) and even in terms of responses to a select number of questions.  If the personal characteristics are highly similar between the two samples, it may be that as suggested by Professor Andrew Bell, selection bias is not reduced by crowdsourcing in this way and that, therefore, this particular type of crowdsourced sample does not yield a better approximation of a true representative sample as intended. I also look at the distributions of the two samples in terms of these demographics, etc. and see which one better reflects the population to see which one is more representative.  
+The purpose of this code is to test this out by examining how similar the purposive sample is to the crowdsourced one in terms of select characteristics (e.g., age, gender, literacy, education, etc.) and even in terms of responses to a select number of questions. If the personal characteristics are highly similar between the two samples, it may be that as suggested by Professor Andrew Bell, selection bias is not reduced by crowdsourcing in this way and that, therefore, this particular type of crowdsourced sample does not yield a better approximation of a true representative sample as intended. I also look at the distributions of the two samples in terms of these demographics, etc. and see which one better reflects the population to see which one is more representative.  
 
 I hypothesize that individuals selected by respondents because they are friends, neighbors, or passersby, would tend to be similar in traits to the respondents and not provide the protection against selection bias that is proposed. 
-
-Bad Shocks - no crowdsourcing info?
-Good Shocks - no crowdsourcing info?
 
 ```{r}
 respondent <- HouseholdComposition_members_level_2.dta %>%filter(hhm_relation == 1) %>% 
