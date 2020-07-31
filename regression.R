@@ -163,7 +163,23 @@ summary(ols <- lm(pct_meat_var ~ numChildren + hh_members + sex + age + maritalS
                     education + attendingCollege + occupationType + canCarry20L + canWalk5Km +
                     canStandOwn + pctCanCarry20L + pctCanWalk5Km + pctCanStandOwn, data = df_final))
 
+summary(ols <- lm(pctCanStandOwn ~ numChildren + hh_members + sex + age + maritalStatus + literacy +
+                    education + attendingCollege + occupationType + pctCanCarry20L + pctCanWalk5Km + 
+                    pct_protein_mean + pct_fish_mean + pct_meat_mean, data = df_final))
+
+summary(glm1 <- glm(canStandOwn ~ sex, family = binomial, data = df_final))
+
 ########################################
+
+# NOTES
+# construct residuals for number of food resopnses 
+# regress the coef of var of sum variation against avg number of food groups of response
+# # numbe rof responses that make up the variation
+# gender matters
+# variation not point estimates that matter
+# random forest to see what variables matter - simulates thousands of fake models
+# average number of food sources per response, number of responses, wealth indicator - wealth
+
 
 #basic linear model
 fit.1<-glm(pct_meat_var ~ numChildren + hh_members + sex + age + maritalStatus + literacy +
