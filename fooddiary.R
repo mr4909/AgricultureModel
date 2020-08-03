@@ -10,12 +10,51 @@
 ########################################################################
 ########################################################################
 
+#########
+# load necessary packages
+#########
+requiredPackages = c('dplyr', # data manipulation
+                     'readr', # read files
+                     'ggplot2', # plots
+                     'tidyverse') # missing values using map
+# only downloads packages if needed
+for(p in requiredPackages){
+  if(!require(p,character.only = TRUE)) install.packages(p)
+  library(p,character.only = TRUE)
+}
+
+
+#########
+# custom functions
+#########
+
+# remove outliers 
+outliers <- function(x){
+  quantiles <- quantile( x, c(.00, .95 ) )
+  x[ x < quantiles[1] ] <- quantiles[1]
+  x[ x > quantiles[2] ] <- quantiles[2]
+  x
+}
+
+#########
+# import dta
+#########
+
 # read food info (calories, food names)
 food_info <- read_csv("food_info.csv")
 
 # import food datasets (3)
 # select noncrowdsourced data and recall period of a week
-fooddiary_1 <- `33.FoodDiary_level_1.dta` %>% filter(crowdsource==0 & recall=="week") %>% 
+
+fooddiary_1 <- read_dta("33.FoodDiary_level_1.dta")
+fooddiary_2 <- read_dta("34. FoodDiary_food_level_2.dta")
+fooddiary_3 <- read_dta("35. Fooddiary_food_foodtype_level_3.dta")
+
+#########
+# cleaning
+#########
+
+fooddiary_1 <- fooddiary_1 %>% filter(crowdsource==0 & recall=="week") %>% 
   # select variables
   select(hh_ID, 
          food_1_ID,
@@ -26,21 +65,15 @@ fooddiary_1 <- `33.FoodDiary_level_1.dta` %>% filter(crowdsource==0 & recall=="w
          food_count) # number of foods selected
 
 # import food types
-fooddiary_2 <- `34. FoodDiary_food_level_2.dta` %>% select(hh_ID, 
-                                                           food_1_ID,
-                                                           food_2_ID,
-                                                           food_grp_namec, 
-                                                           food_type) #will require grepl
+fooddiary_2 <- fooddiary_2 %>% select(hh_ID, food_1_ID, food_2_ID, food_grp_namec, food_type) #will require grepl
+
 # import food quantities, food names, and quantities
-fooddiary_3 <- `35. Fooddiary_food_foodtype_level_3.dta` %>% select(hh_ID, 
-                                                                    food_2_ID,
-                                                                    food_3_ID,
-                                                                    food_ID = food_type_name, 
-                                                                    food_type_quant,
-                                                                    food_type_unit,
-                                                                    quant_pur, #How much consumed was purchased?
-                                                                    quant_own, #How much consumed was own production?
-                                                                    quant_other) #How much consumed was from other sources?
+fooddiary_3 <- fooddiary_3 %>% select(hh_ID, food_2_ID, food_3_ID, food_ID = food_type_name, 
+                                                                   food_type_quant,
+                                                                   food_type_unit,
+                                                                   quant_pur, #How much consumed was purchased?
+                                                                   quant_own, #How much consumed was own production?
+                                                                   quant_other) #How much consumed was from other sources?
 
 # merge food datasets
 fooddiary_1_2 <- merge(fooddiary_1,fooddiary_2, by=c("hh_ID","food_1_ID"))
@@ -56,7 +89,6 @@ fooddiary_all <- fooddiary_all[complete.cases(fooddiary_all),]
 #########
 # Calories
 #########
-
 
 # merge with food list names 
 fooddiary_cleaned <- merge(food_info, fooddiary_all, by="food_ID")
@@ -116,8 +148,8 @@ fooddiary_cleaned <- fooddiary_cleaned %>% mutate(date_new = as.Date(as.POSIXct(
 
 # create date for weeks
 # check for different week number dates and replace with the max date
-new_min <- fooddiary_cleaned %>% group_by(week_number) %>% summarise(min(date_new))
-new_min <- new_min %>% mutate(week_date = `min(date_new)`) %>% select(-`min(date_new)`)
+# new_min <- fooddiary_cleaned %>% group_by(week_number) %>% summarise(min(date_new))
+# new_min <- new_min %>% mutate(week_date = `min(date_new)`) %>% select(-`min(date_new)`)
 
 #########
 # *Food Type Unit* - need to be standardized
@@ -165,7 +197,6 @@ fooddiary_cleaned <- fooddiary_cleaned %>% select(hh_ID,
                                                   food_2_ID,
                                                   food_3_ID)
 # head(fooddiary_cleaned)
-# 
 # summary(fooddiary_cleaned$calories_total_grams)
 
 # Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
@@ -406,6 +437,10 @@ fooddiary_count$calories_total_grams = as.numeric(
 # view data
 # summary(fooddiary_count$calories_total_grams)
 
+# merge fooddiary_count (unit = 8) and other dataset fooddiary_count to get complete df
+fooddiary_nocounts <- fooddiary_cleaned %>% filter(food_type_unit != 8)
+fooddiary_all <- rbind(fooddiary_nocounts, fooddiary_count)
+
 ########################################################################
 ########################################################################
 # FINAL FOOD DIARY DATAFRAME
@@ -414,10 +449,6 @@ fooddiary_count$calories_total_grams = as.numeric(
 ########################################################################
 ########################################################################
 
-# merge fooddiary_count (unit = 8) and other dataset fooddiary_count to get complete df
-fooddiary_nocounts <- fooddiary_cleaned %>% filter(food_type_unit != 8)
-fooddiary_all <- rbind(fooddiary_nocounts, fooddiary_count)
-
 # remove missing data 
 fooddiary_all <- fooddiary_all[complete.cases(fooddiary_all),]
 
@@ -425,67 +456,124 @@ fooddiary_all <- fooddiary_all[complete.cases(fooddiary_all),]
 fooddiary_all$calories_total_grams <- outliers(fooddiary_all$calories_total_grams)
 
 # only use recall times of a week
-fooddiary_all_week <- fooddiary_all %>% filter(recall=="week")
+fooddiary <- fooddiary_all %>% filter(recall=="week")
 
 #########
 # calculate proportions
 #########
 
 # meat
-fooddiary_all_week <- fooddiary_all_week %>% mutate(isMeat = ifelse(food_name_type == "meategg",1,0))
-
-pct_meat <- fooddiary_all_week %>% group_by(hh_ID, week_number) %>% tally(isMeat)
-pct_meat <- pct_meat %>% mutate(numMeat = n) %>% select(-n)
-myfreqs <- fooddiary_all_week %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
-pct_meat <- merge(myfreqs, pct_meat, by = c("hh_ID","week_number"))
-pct_meat <- pct_meat %>% mutate(pct_meat = numMeat/freq) %>% select(-numMeat, -freq)
+fooddiary <- fooddiary %>% mutate(isMeat = ifelse(food_name_type == "meategg",1,0))
+    pct_meat <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(isMeat)
+    pct_meat <- pct_meat %>% mutate(numMeat = n) %>% select(-n)
+    myfreqs <- fooddiary %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
+    pct_meat <- merge(myfreqs, pct_meat, by = c("hh_ID","week_number"))
+    pct_meat <- pct_meat %>% mutate(pct_meat = numMeat/freq) %>% select(-numMeat, -freq)
 
 # fish    
-fooddiary_all_week <- fooddiary_all_week %>% mutate(isFish = ifelse(food_name_type == "fishlarge"|food_name_type == "fishsmall",1,0))
-
-pct_fish <- fooddiary_all_week %>% group_by(hh_ID, week_number) %>% tally(isFish)
-pct_fish <- pct_fish %>% mutate(numFish = n) %>% select(-n)
-myfreqs <- fooddiary_all_week %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
-pct_fish <- merge(myfreqs, pct_fish, by = c("hh_ID","week_number"))
-pct_fish <- pct_fish %>% mutate(pct_fish = numFish/freq) %>% select(-numFish, -freq)
-
+fooddiary <- fooddiary %>% mutate(isFish = ifelse(food_name_type == "fishlarge"|food_name_type == "fishsmall",1,0))
+    pct_fish <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(isFish)
+    pct_fish <- pct_fish %>% mutate(numFish = n) %>% select(-n)
+    myfreqs <- fooddiary %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
+    pct_fish <- merge(myfreqs, pct_fish, by = c("hh_ID","week_number"))
+    pct_fish <- pct_fish %>% mutate(pct_fish = numFish/freq) %>% select(-numFish, -freq)
 
 # protein
-fooddiary_all_week <- fooddiary_all_week %>% mutate(isProtein = ifelse(food_name_type == "fishlarge"|
-                                                                         food_name_type == "fishsmall"|
-                                                                         food_name_type == "meategg",1,0))
-
-pct_protein <- fooddiary_all_week %>% group_by(hh_ID, week_number) %>% tally(isProtein)
-pct_protein <- pct_protein %>% mutate(numProtein = n) %>% select(-n)
-myfreqs <- fooddiary_all_week %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
-pct_protein <- merge(myfreqs, pct_protein, by = c("hh_ID","week_number"))
-pct_protein <- pct_protein %>% mutate(pct_protein = numProtein/freq) %>% select(-numProtein, -freq)
+fooddiary <- fooddiary %>% mutate(isProtein = ifelse(food_name_type == "fishlarge"|
+                                                       food_name_type == "fishsmall"|
+                                                       food_name_type == "meategg",1,0))
+    pct_protein <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(isProtein)
+    pct_protein <- pct_protein %>% mutate(numProtein = n) %>% select(-n)
+    myfreqs <- fooddiary %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
+    pct_protein <- merge(myfreqs, pct_protein, by = c("hh_ID","week_number"))
+    pct_protein <- pct_protein %>% mutate(pct_protein = numProtein/freq) %>% select(-numProtein, -freq)
+    
+# merge pct findings with fooddiary
+fooddiary <- merge(fooddiary, pct_protein, by = c("hh_ID","week_number"))
+fooddiary <- merge(fooddiary, pct_fish, by = c("hh_ID","week_number"))
+fooddiary <- merge(fooddiary, pct_meat, by = c("hh_ID","week_number"))
 
 #########
-## Find avg calories per person in each household
+## find avg calories per person in each household by food item
 #########
+
+fooddiary <- merge(fooddiary, hh_count, by = "hh_ID")
+fooddiary <- fooddiary %>% mutate(calories_per_hh_member = calories_total_grams/hh_members)
 
 #########
 # find average calories by household
 #########
-calories <- fooddiary_all_week %>% group_by(hh_ID, week_number) %>% tally(calories_total_grams)
-calories <- calories %>% mutate(hh_calories_total = n) %>% select(-n)
 
-df_calorie_avg <- merge(calories, hh_count, by = "hh_ID")
+freqs <- fooddiary %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
+calories <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(calories_total_grams)
+calories <- calories %>% mutate(calories_total = n) %>% select(-n)
+hh_calories <- merge(calories, freqs, by = c("hh_ID","week_number"))
+hh_calories <- merge(hh_calories, hh_count, by = c("hh_ID"))
+hh_calories <- hh_calories %>% mutate(avg_weekly_calories_pp = calories_total/hh_members) 
 
-df_calorie_avg <- df_calorie_avg %>% mutate(avg_calories_member = hh_calories_total/hh_members) 
+# remove outliers with custom outliers function 
+hh_calories$avg_calories_member <- outliers(hh_calories$avg_calories_member)
 
-# create dataframe for graphs
-df_food_basic1 <- df_calorie_avg %>% select(hh_ID, week_number, avg_calories_member)
+#########
+# merge calories pp with pct meat, pct fish, pct protein
+#########
 
-# remove outliers with custom outliers function (found at top of code)
-df_food_basic1$avg_calories_member <- outliers(df_food_basic1$avg_calories_member)
+# weekly data
+fooddiary_week <- merge(hh_calories, pct_fish, by =c("hh_ID","week_number"))
+fooddiary_week <- merge(fooddiary_week, pct_meat, by =c("hh_ID","week_number"))
+fooddiary_week <- merge(fooddiary_week, pct_protein, by =c("hh_ID","week_number"))
+fooddiary_week <- merge(fooddiary_week, freqs, by =c("hh_ID","week_number"))
+fooddiary_week <- fooddiary_week %>% mutate(num_submissions = freq) %>% select(-freq)
 
-df <- merge(df_food_basic1, new_min, by = "week_number")
+##################
+##################
+# final dataset with hh information
+##################
+##################
 
-# Merge with respondent and household data and food data
+# averages for the year / no weekly data
+# 203 households
+temp <- fooddiary_week %>% select(hh_ID, pct_meat, pct_fish, pct_protein, avg_weekly_calories_pp, num_submissions)
+temp <- temp %>% group_by(hh_ID) %>% summarise_each(funs(mean, sd, var))
 
-df_all <- merge(df, hh_respondent, by=c("hh_ID"))
-df_all <- merge(df_all, pct_fish, by = c("hh_ID", "week_number"))
-df_all <- merge(df_all, pct_meat, by = c("hh_ID", "week_number"))
-df_all <- merge(df_all, pct_protein, by = c("hh_ID", "week_number"))
+# merge food summary data with hh info 
+# 176 households
+final_data <- merge(temp, hh_respondent, by = "hh_ID")
+final_data$hh_ID <- factor(final_data$hh_ID)
+
+# merge with housing
+# 128 households
+final_data1 <- merge(final_data, housing, by = "hh_ID")
+
+# merge with nonagricultural_enterprise
+# 105 households
+final_data2 <- merge(final_data, nonagricultural_enterprise, by = "hh_ID")
+
+# merge with latrine
+# 132 households
+final_data3 <- merge(final_data, latrine, by = "hh_ID")
+
+# merge with plots
+# 132 households
+final_data4 <- merge(final_data, plots, by = "hh_ID")
+
+# merge with all
+# 73 observations
+final_data_all <- merge(final_data, housing, by = "hh_ID")
+final_data_all <- merge(final_data_all, nonagricultural_enterprise, by = "hh_ID")
+final_data_all <- merge(final_data_all, latrine, by = "hh_ID")
+final_data_all <- merge(final_data_all, plots, by = "hh_ID")
+
+# write csvs
+write.csv(fooddiary_week, "fooddiary_week.csv")
+write.csv(final_data, "final_data.csv")
+write.csv(final_data1, "final_data1.csv")
+write.csv(final_data2, "final_data2.csv")
+write.csv(final_data3, "final_data3.csv")
+write.csv(final_data4, "final_data4.csv")
+write.csv(final_data_all, "final_data_all.csv")
+write.csv(plots, "plots.csv")
+write.csv(nonagricultural_enterprise, "nonagricultural_enterprise.csv")
+write.csv(latrine, "latrine.csv")
+write.csv(housing, "housing.csv")
+

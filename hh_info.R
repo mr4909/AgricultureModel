@@ -159,11 +159,9 @@ hh_health$canCarry20L = factor(hh_health$canCarry20L)
 hh_health$canWalk5Km = factor(hh_health$canWalk5Km)
 hh_health$canStandOwn = factor(hh_health$canStandOwn)
 
-########################################################################
-########################################################################
+##################################################
 # Respondent info and health of household members
-########################################################################
-########################################################################
+##################################################
 
 # data about respondents
 hh_respondent <- hh_health %>% filter(hhm_relation == 1)
@@ -178,9 +176,171 @@ hh_respondent <- hh_respondent %>% select(-member_1_ID,
                                           -totalCanWalk5Km,
                                           -isChild)
 
-########################################################################
-########################################################################
-# Wealth
-########################################################################
-########################################################################
+##################################################
+# Housing Characteristics
+##################################################
+
+##########
+# Housing
+##########
+
+housing <- `41. HousingandSanitation.dta` 
+
+# if there is a hh_ID duplicate, use the first entry
+# question was only supposed to be answered once but some households submitted twice
+housing$submissiondate <- as.Date(housing$submissiondate, "%b %d, %Y")
+housing <- setDT(housing)[housing[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+housing <- housing %>% select(-submissiondate)
+# TRUE, if there are no duplicates in hh_ID
+# length(unique(housing$hh_ID)) == nrow(housing)
+
+# recode factor levels for housing characteristics
+housing$lighting_source_type = as.factor(
+  ifelse(housing$lighting_source %in% c('1'),'electricity',
+         ifelse(housing$lighting_source %in% c('3'),'solar',
+                ifelse(housing$lighting_source %in% c('4'),'kerosine','other'))))
+housing$housefloor_material = as.factor(
+  ifelse(housing$housefloor_material %in% c('1'),
+         'concrete',
+         ifelse(housing$housefloor_material %in% c('2','3','5','99'),'other','mud'))
+)
+housing$houseroof_material = as.factor(
+  ifelse(housing$houseroof_material %in% c('2'), 'tin','other'))
+housing$housewall_material = as.factor(
+  ifelse(housing$housewall_material %in% c('1'),
+         'concrete',
+         ifelse(housing$housewall_material %in% c('3','4','5','8'),'other','tin'))
+)
+housing <- housing %>% select(hh_ID,
+                              house_rooms_sleeping, 
+                              housefloor_material, 
+                              house_elec,
+                              housewall_material)
+# factor electricity variable
+housing$house_elec <- as.factor(housing$house_elec)
+
+##########
+# Plots
+##########
+
+# merge plot datasets together
+plots <- Plots_plot_level_2.dta # fix year
+temp <- plots_level_1.dta %>% select(hh_ID, submissiondate, plot_1_ID, today) 
+plots <- merge(plots, temp, by=c("hh_ID","plot_1_ID"))
+
+# find plot age
+plots$today <- format(as.Date(plots$today, format="%b %d, %Y"),"%Y")
+plots$yr_acq <- format(as.Date(plots$yr_acq, format="%b %d, %Y"),"%Y")  
+plots$today <- as.numeric(plots$today)
+plots$yr_acq <- as.numeric(plots$yr_acq)
+plots$plot_age <- plots$today - plots$yr_acq 
+
+# too many plot types (change to three types: homestead, cultivable, other)
+# 1	Homestead
+# 2	Cultivable/arable land
+# 3	Pasture
+# 4	Bush/forest
+# 5	Waste/non-arable land
+# 6	Land in riverbed
+# 7	Other residential/commercial plot
+# 8	Cultivable Pond
+# 9	Derelict Pond
+plots$plot_type_homestead <- ifelse(grepl("1",plots$plot_type), 1, 0)
+temp <- c("2","8")
+plots$plot_type_cultivable_land_pond <- ifelse(grepl(paste(temp, collapse = "|"),plots$plot_type), 1, 0)
+temp <- c("3","4","5","6","7","9"," ")
+plots$plot_type_other <- ifelse(grepl(paste(temp, collapse = "|"),plots$plot_type), 1, 0)
+plots <- plots %>% 
+  mutate(plot_type = case_when((plot_type_homestead==1) ~ "homestead",
+                               (plot_type_cultivable_land_pond==1) ~ "cultivable",
+                               (plot_type_other==1) ~ "other"))
+plots <- plots %>% select(-plot_type_homestead,-plot_type_cultivable_land_pond,-plot_type_other)
+
+# create variable has a cultivable plot 
+plots <- plots %>% mutate(hasCultivablePlot = ifelse(plot_type == "cultivable",1,0))
+temp <- plots %>% group_by(hh_ID) %>% tally(hasCultivablePlot)
+plots <- merge(plots, temp, by = "hh_ID")
+plots <- plots %>% mutate(totalCultivablePlot = n) %>% select(-n)
+
+# operational status
+# cur_opr	1	Fallow
+# cur_opr	2	Own operated
+# cur_opr	3	Rented/leased in/cash
+# cur_opr	4	Rented/leased in/crop share
+# cur_opr	5	Mortgaged in
+# cur_opr	6	Rented/leased out/cash
+# cur_opr	7	Rented/leased out/crop share
+# cur_opr	8	Mortgage out
+# cur_opr	9	Group leased in with other farmer
+# cur_opr	10	Leased out to NGO
+# cur_opr	11	Taken from joint owner
+# cur_opr	12	Jointly with other owners
+
+#  1   2   3   4   5   6   7   8   9  11  12 
+# 56 354  17   8  21   6   5   9   4   2   1
+
+# owns a plot
+plots <- plots %>% mutate(hasOwnPlot = ifelse(cur_opr_status == 2,1,0))
+temp <- plots %>% group_by(hh_ID) %>% tally(hasOwnPlot)
+plots <- merge(plots, temp, by = "hh_ID")
+plots <- plots %>% mutate(totalOwnPlot = n) %>% select(-n)
+
+# select variables 
+plots <- plots %>% select(hh_ID, 
+                          totalCultivablePlot,
+                          totalOwnPlot)
+
+# remove duplicates
+plots <- distinct(plots, hh_ID, .keep_all= TRUE)
+# plots$hh_ID[duplicated(plots$hh_ID)]
+
+##########
+## Non-agricultural enterprise
+##########
+
+# Anyone in household owned/operated any business in 12 months?
+nonagricultural_enterprise <- `57. NonAgriculturalEnterprise_level_1.dta` %>% select(hh_ID, submissiondate, business)
+
+# if there is a hh_ID duplicate, use the first entry
+nonagricultural_enterprise$submissiondate <- as.Date(nonagricultural_enterprise$submissiondate, "%b %d, %Y")
+nonagricultural_enterprise <- setDT(nonagricultural_enterprise)[nonagricultural_enterprise[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+nonagricultural_enterprise <- nonagricultural_enterprise %>% select(-submissiondate)
+
+
+# factor variables
+nonagricultural_enterprise$business <- factor(nonagricultural_enterprise$business)
+
+# check for duplicates 
+# nonagricultural_enterprise$hh_ID[duplicated(nonagricultural_enterprise$hh_ID)]
+
+##########
+## Latrine and Water
+##########
+
+# select variables
+latrine <- `87. latrineUse.dta` %>% select(hh_ID, submissiondate, use_lat, main_use, count_latrine, pct_open)
+
+# main_use  - too many factor levels (change to flush or no flush)
+temp <- c("1","2","3","4","5","6")
+latrine$main_use_flush <- ifelse(grepl(paste(temp, collapse = "|"),latrine$main_use), 1, 0)
+latrine <- latrine %>% select(-main_use)
+
+# pct_open  - too many factor levels (change to defacate or doesn't defacate in public)
+latrine$defecation_public <- ifelse(grepl("1",latrine$pct_open), 1, 0)
+latrine <- latrine %>% select(-pct_open)
+
+# remove outliers for latrine count
+latrine <- latrine %>% filter(count_latrine >= 0 & count_latrine <= 10)
+
+# if there is a hh_ID duplicate, use the first entry
+latrine$submissiondate <- as.Date(latrine$submissiondate, "%b %d, %Y")
+latrine <- setDT(latrine)[latrine[, .I[which.min(submissiondate)], by=hh_ID]$V1]
+latrine <- latrine %>% select(-submissiondate)
+
+# factor variables
+latrine$use_lat <- factor(latrine$use_lat)
+latrine$main_use_flush <- factor(latrine$main_use_flush)
+latrine$defecation_public <- factor(latrine$defecation_public)
+
+
 
