@@ -458,88 +458,71 @@ fooddiary_all$calories_total_grams <- outliers(fooddiary_all$calories_total_gram
 # only use recall times of a week
 fooddiary <- fooddiary_all %>% filter(recall=="week")
 
+# meat
+fooddiary <- fooddiary %>% mutate(isMeat = ifelse(food_name_type == "meategg",1,0))
+fooddiary <- fooddiary %>% mutate(meat_calories = ifelse(isMeat == 1,calories_total_grams,0))
+
+# fish
+fooddiary <- fooddiary %>% mutate(isFish = ifelse(food_name_type == "fishlarge"|food_name_type == "fishsmall",1,0))
+fooddiary <- fooddiary %>% mutate(fish_calories = ifelse(isFish == 1,calories_total_grams,0))
+
+# protein
+fooddiary <- fooddiary %>% mutate(isProtein = ifelse(food_name_type == "fishlarge"|
+                                                     food_name_type == "fishsmall"|
+                                                     food_name_type == "meategg",1,0))
+fooddiary <- fooddiary %>% mutate(protein_calories = ifelse(isProtein == 1,calories_total_grams,0))
+
 #########
 # calculate proportions
 #########
 
 # meat
-fooddiary <- fooddiary %>% mutate(isMeat = ifelse(food_name_type == "meategg",1,0))
     pct_meat <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(isMeat)
     pct_meat <- pct_meat %>% mutate(numMeat = n) %>% select(-n)
     myfreqs <- fooddiary %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
     pct_meat <- merge(myfreqs, pct_meat, by = c("hh_ID","week_number"))
-    pct_meat <- pct_meat %>% mutate(pct_meat = numMeat/freq) %>% select(-numMeat, -freq)
-
+    pct_meat <- pct_meat %>% mutate(pct_meat = numMeat/freq) #%>% select(-numMeat, -freq)
+    fooddiary <- merge(fooddiary, pct_meat, by = c("hh_ID","week_number"))
+  
 # fish    
-fooddiary <- fooddiary %>% mutate(isFish = ifelse(food_name_type == "fishlarge"|food_name_type == "fishsmall",1,0))
     pct_fish <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(isFish)
     pct_fish <- pct_fish %>% mutate(numFish = n) %>% select(-n)
-    myfreqs <- fooddiary %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
     pct_fish <- merge(myfreqs, pct_fish, by = c("hh_ID","week_number"))
-    pct_fish <- pct_fish %>% mutate(pct_fish = numFish/freq) %>% select(-numFish, -freq)
-
+    pct_fish <- pct_fish %>% mutate(pct_fish = numFish/freq) #%>% select(-numFish, -freq)
+    fooddiary <- merge(fooddiary, pct_fish, by = c("hh_ID","week_number","freq"))
+    
 # protein
-fooddiary <- fooddiary %>% mutate(isProtein = ifelse(food_name_type == "fishlarge"|
-                                                       food_name_type == "fishsmall"|
-                                                       food_name_type == "meategg",1,0))
     pct_protein <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(isProtein)
     pct_protein <- pct_protein %>% mutate(numProtein = n) %>% select(-n)
-    myfreqs <- fooddiary %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
     pct_protein <- merge(myfreqs, pct_protein, by = c("hh_ID","week_number"))
-    pct_protein <- pct_protein %>% mutate(pct_protein = numProtein/freq) %>% select(-numProtein, -freq)
-    
-# merge pct findings with fooddiary
-fooddiary <- merge(fooddiary, pct_protein, by = c("hh_ID","week_number"))
-fooddiary <- merge(fooddiary, pct_fish, by = c("hh_ID","week_number"))
-fooddiary <- merge(fooddiary, pct_meat, by = c("hh_ID","week_number"))
+    pct_protein <- pct_protein %>% mutate(pct_protein = numProtein/freq) #%>% select(-numProtein, -freq)
+    fooddiary <- merge(fooddiary, pct_protein, by = c("hh_ID","week_number","freq"))
 
 #########
-## find avg calories per person in each household by food item
-#########
-
-fooddiary <- merge(fooddiary, hh_count, by = "hh_ID")
-fooddiary <- fooddiary %>% mutate(calories_per_hh_member = calories_total_grams/hh_members)
-
-#########
-# find average calories by household
-#########
-
-freqs <- fooddiary %>% group_by(hh_ID, week_number) %>% summarise(freq = n())
-calories <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(calories_total_grams)
-calories <- calories %>% mutate(calories_total = n) %>% select(-n)
-hh_calories <- merge(calories, freqs, by = c("hh_ID","week_number"))
-hh_calories <- merge(hh_calories, hh_count, by = c("hh_ID"))
-hh_calories <- hh_calories %>% mutate(avg_weekly_calories_pp = calories_total/hh_members) 
-
-# remove outliers with custom outliers function 
-hh_calories$avg_calories_member <- outliers(hh_calories$avg_calories_member)
-
-#########
-# merge calories pp with pct meat, pct fish, pct protein
-#########
-
-# weekly data
-fooddiary_week <- merge(hh_calories, pct_fish, by =c("hh_ID","week_number"))
-fooddiary_week <- merge(fooddiary_week, pct_meat, by =c("hh_ID","week_number"))
-fooddiary_week <- merge(fooddiary_week, pct_protein, by =c("hh_ID","week_number"))
-fooddiary_week <- merge(fooddiary_week, freqs, by =c("hh_ID","week_number"))
-fooddiary_week <- fooddiary_week %>% mutate(num_submissions = freq) %>% select(-freq)
-
-##################
-##################
-# final dataset with hh information
-##################
-##################
-
 # averages for the year / no weekly data
-# 203 households
-temp <- fooddiary_week %>% select(hh_ID, pct_meat, pct_fish, pct_protein, avg_weekly_calories_pp, num_submissions)
-temp <- temp %>% group_by(hh_ID) %>% summarise_each(funs(mean, sd, var))
+#########
 
-# merge food summary data with hh info 
+temp <- hh_count %>% select(hh_ID, hh_members)
+fooddiary <- merge(temp, fooddiary, by = c("hh_ID"))
+# avg calories per hh member per food item 
+fooddiary <- fooddiary %>% mutate(avg_calories_pp = calories_total_grams/hh_members)
+      
+# 203 households
+summaries <- fooddiary %>% select(hh_ID, 
+                             freq,
+                             pct_meat, 
+                             pct_fish, 
+                             pct_protein, 
+                             meat_calories,
+                             fish_calories,
+                             protein_calories,
+                             calories_total_grams,
+                             avg_calories_pp)
+summaries <- summaries %>% group_by(hh_ID) %>% summarise_each(funs(mean, sd, var))
+
+# merge with basic info
 # 176 households
-final_data <- merge(temp, hh_respondent, by = "hh_ID")
-final_data$hh_ID <- factor(final_data$hh_ID)
+final_data <- merge(summaries, hh_respondent, by = "hh_ID")
 
 # merge with housing
 # 128 households
@@ -565,15 +548,15 @@ final_data_all <- merge(final_data_all, latrine, by = "hh_ID")
 final_data_all <- merge(final_data_all, plots, by = "hh_ID")
 
 # write csvs
-write.csv(fooddiary_week, "fooddiary_week.csv")
+write.csv(fooddiary, "fooddiary_week.csv")
 write.csv(final_data, "final_data.csv")
 write.csv(final_data1, "final_data1.csv")
 write.csv(final_data2, "final_data2.csv")
 write.csv(final_data3, "final_data3.csv")
 write.csv(final_data4, "final_data4.csv")
 write.csv(final_data_all, "final_data_all.csv")
-write.csv(plots, "plots.csv")
-write.csv(nonagricultural_enterprise, "nonagricultural_enterprise.csv")
-write.csv(latrine, "latrine.csv")
-write.csv(housing, "housing.csv")
+# write.csv(plots, "plots.csv")
+# write.csv(nonagricultural_enterprise, "nonagricultural_enterprise.csv")
+# write.csv(latrine, "latrine.csv")
+# write.csv(housing, "housing.csv")
 

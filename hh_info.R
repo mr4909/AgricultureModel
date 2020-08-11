@@ -214,6 +214,7 @@ housing$housewall_material = as.factor(
 housing <- housing %>% select(hh_ID,
                               house_rooms_sleeping, 
                               housefloor_material, 
+                              houseroof_material,
                               house_elec,
                               housewall_material)
 # factor electricity variable
