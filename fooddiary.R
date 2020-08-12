@@ -506,6 +506,21 @@ temp <- hh_count %>% select(hh_ID, hh_members)
 fooddiary <- merge(temp, fooddiary, by = c("hh_ID"))
 # avg calories per hh member per food item 
 fooddiary <- fooddiary %>% mutate(avg_calories_pp = calories_total_grams/hh_members)
+
+
+#########
+# totals by hh and week
+#########
+
+fish <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(fish_calories)
+fish <- fish %>% mutate(fish_calories_wk = n) %>% select(-n)
+meat <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(meat_calories)
+meat <- meat %>% mutate(meat_calories_wk = n) %>% select(-n)
+protein <- fooddiary %>% group_by(hh_ID, week_number) %>% tally(protein_calories)
+protein <- protein %>% mutate(protein_calories_wk = n) %>% select(-n)
+weekly_protein <- merge(fish, meat, by = c("hh_ID","week_number"))
+weekly_protein <- merge(weekly_protein, protein, by = c("hh_ID","week_number"))
+write.csv(weekly_protein, "weekly_protein.csv")
       
 # 203 households
 summaries <- fooddiary %>% select(hh_ID, 
